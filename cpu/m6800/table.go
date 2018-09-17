@@ -1,28 +1,4 @@
-package main
-
-import (
-    "fmt"
-    "io"
-    "io/ioutil"
-    "os"
-//    "strings"
-)
-
-type MemBuffer interface {
-    U8(pc int)  byte
-    U16(pc int) uint16
-//    r32(pc int) uint32
-//    r64(pc int) uint64
-}
-
-type M6800Mem []byte
-
-func (m *M6800Mem) U8(addr int) byte {
-    return (*m)[addr]
-}
-func (m *M6800Mem) U16(addr int) uint16 {
-    return uint16((*m)[addr+1]) + ( uint16((*m)[addr])<<8 )
-}
+package m6800
 
 type Alignment int
 
@@ -39,17 +15,14 @@ const (
     Sx1  // HD63701YO, undocumented: byte from (s+1)
 )
 
-const STEP_OVER = 1<<16
-const STEP_OUT  = 1<<17
-
-type Opcode struct {
+type OpcodeDesc struct {
     Mnemonic     string
     AddrMode     Alignment
     InvalidMask  int  // invalid for 1:6800/6802/6808, 2:6801/6803, 4:HD63701
 }
 
 // 256 M680x opcodes + 4 alternate NSC-8105 opcodes
-var M6800Ops [260]Opcode = [260]Opcode{
+var M6800Ops [260]OpcodeDesc = [260]OpcodeDesc{
 // 00
     {"ill", Inh, 7}, {"nop", Inh, 0}, {"ill", Inh, 7}, {"ill", Inh, 7},
     {"lsrd", Inh, 1}, {"asld", Inh, 1}, {"tap", Inh, 0}, {"tpa", Inh, 0},
@@ -132,125 +105,4 @@ var M6800Ops [260]Opcode = [260]Opcode{
     {"ldd", Ext, 1}, {"_std", Ext, 1}, {"ldx", Ext, 0}, {"stx", Ext, 0},
 // NSC-8105 alternate instructions: 0xfc, 0xec, 0xbb, 0xb2
     {"addx", Ext, 0}, {"adcx", Imb, 0}, {"bitx", Imx, 0}, {"stx", Imx, 0},
-}
-
-func disassemble(w io.Writer, pc int, mem MemBuffer, ram MemBuffer) int {
-    flags := 0
-    advance := 1
-    invalid_mask := 1  // 6800/6802/6808/8105==1, 6801/6803==2, default=4
-    code := int(mem.U8(pc))
-    fields := []string{}
-
-    fields = append(fields, fmt.Sprintf("0x%.4X", pc))
-    fields = append(fields, fmt.Sprintf("%.2X", code))
-    if false {  // NSC-8105 == true
-        // swap bits
-        code = (code & 0x3c) | ((code & 0x41) << 1) | ((code & 0x82) >> 1)
-        switch code {
-            case 0xfc: code = 0x0100;
-            case 0xec: code = 0x0101;
-            case 0x7b: code = 0x0102;
-            case 0x71: code = 0x0103;
-        }
-    }
-    opcode := M6800Ops[code]
-    switch opcode.Mnemonic {
-        case "bsr", "jsr":
-            flags = STEP_OVER
-        case "rti", "rts":
-            flags = STEP_OUT
-    }
-
-    if (invalid_mask & opcode.InvalidMask) != 0 {
-        fields = append(fields, "ILL")
-        output := fmt.Sprintf("%s    %-8s  %s\n", fields[0], fields[1], fields[2])
-        w.Write([]byte(output))
-        _ = flags
-        return 1 // | flags // | SUPPORTED
-    }
-    desc := fmt.Sprintf("%-5s ", opcode.Mnemonic)
-    switch opcode.AddrMode {
-        case Rel:  // relative
-            // "$%04X", pc + (int8_t)params.r8(pc+1) + 2
-            fields[1] += fmt.Sprintf("%.2X", mem.U8(pc+1))
-            offset := mem.U8(pc+1)
-//            if (offset & 0x80) == 0x80 {
-//                offset -= 128
-//            }
-// XXX: may be incorrect
-            desc += fmt.Sprintf("$%04X", pc + int(offset + 2))
-            advance += 1
-        case Imb:  // byte immediate
-            // "#$%02X", params.r8(pc+1)
-            fields[1] += fmt.Sprintf("%.2X", mem.U8(pc+1))
-            desc += fmt.Sprintf("0x%02X", mem.U8(pc+1))
-            advance += 1
-        case Imw:  // word immediate
-            // "#$%04X", params.r16(pc+1)
-            fields[1] += fmt.Sprintf("%.2X%.2X", mem.U8(pc+1), mem.U8(pc+2))
-            desc += fmt.Sprintf("$%04X", mem.U16(pc+1))
-            advance += 2
-        case Idx:  // x + byte offset
-            // "(x+$%02X)", params.r8(pc+1)
-            fields[1] += fmt.Sprintf("%.2X", mem.U8(pc+1))
-            desc += fmt.Sprintf("(x+0x%02X)", mem.U8(pc+1))
-            advance += 1
-        case Imx:  // HD63701YO: immediate, x + byte offset
-            // "#$%02X,(x+$%02x)", params.r8(pc+1), params.r8(pc+2)
-            fields[1] += fmt.Sprintf("%.2X%.2X", mem.U8(pc+1), mem.U8(pc+2))
-            desc += fmt.Sprintf("0x%02X,(x+0x%02x)", mem.U8(pc+1), mem.U8(pc+2))
-            advance += 2
-        case Dir:  // direct (aka zero-page)
-            // "$%02X", params.r8(pc+1)
-            fields[1] += fmt.Sprintf("%.2X", mem.U8(pc+1))
-            desc += fmt.Sprintf("0x%02X", mem.U8(pc+1))
-            advance += 1
-        case Imd:  // HD63701YO: immediate, direct address
-            // "#$%02X,$%02X", params.r8(pc+1), params.r8(pc+2)
-            fields[1] += fmt.Sprintf("%.2X%.2X", mem.U8(pc+1), mem.U8(pc+2))
-            desc += fmt.Sprintf("0x%02X,0x%02X", mem.U8(pc+1), mem.U8(pc+2))
-            advance += 2
-        case Ext:  // extended
-            // "$%04X", params.r16(pc+1)
-            fields[1] += fmt.Sprintf("%.2X%.2X", mem.U8(pc+1), mem.U8(pc+2))
-            desc += fmt.Sprintf("$%04X", mem.U16(pc+1))
-            advance += 2
-        case Sx1:  // HD63701YO, undocumented: byte from (s+1)
-            // util::stream_format(stream, "(s+1)")
-        case Inh:  // no params
-    }
-    fields = append(fields, desc)
-    output := fmt.Sprintf("%s    %-8s  %s\n", fields[0], fields[1], fields[2])
-    w.Write([]byte(output))
-    return advance
-}
-
-func main() {
-    if len(os.Args) < 2 {
-        fmt.Println("Usage: disasm somerom.rom")
-        os.Exit(-1)
-    }
-    romfile, err := os.Open(os.Args[1]);
-    if err != nil {
-        fmt.Println("Error opening '" + os.Args[1] + "':", err.Error())
-        os.Exit(-1)
-    }
-    defer romfile.Close()
-
-    buf, err := ioutil.ReadAll(romfile)
-    if err != nil {
-        fmt.Println("Error reading '" + os.Args[1] + "':", err.Error())
-        os.Exit(-1)
-    }
-
-    rom := M6800Mem(buf)
-
-    pc := 0
-    for {
-        advance := disassemble(os.Stdout, pc, MemBuffer(&rom), MemBuffer(&rom))
-        pc += advance
-        if pc >= len(rom) {
-            break
-        }
-    }
 }
