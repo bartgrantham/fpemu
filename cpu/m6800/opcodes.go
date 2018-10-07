@@ -27,7 +27,35 @@ func (m *M6800) dispatch(opcode uint8, mmu mem.MMU16) error {
     return nil
 }
 
-// need a function that updates status register based on a value
+
+// flags: HI NZVC
+//        21 8421
+
+func (m *M6800) set_NZ8(val uint8) {
+    if val == 0 {
+        m.CC |= Z  // set Z
+    } else {
+        m.CC &= ^Z // clear Z
+    }
+    if val & 0x80 == 0x80 {
+        m.CC |= N
+    } else {
+        m.CC &= ^N
+    }
+}
+
+func (m *M6800) set_NZ16(val uint16) {
+    if val == 0 {
+        m.CC |= Z  // set Z
+    } else {
+        m.CC &= ^Z // clear Z
+    }
+    if val & 0x8000 == 0x8000 {
+        m.CC |= N
+    } else {
+        m.CC &= ^N
+    }
+}
 
 // CLI, clear interrupt flag (enables inerrupts)
 func (m *M6800) CLI_0e(mmu mem.MMU16) {
@@ -42,25 +70,33 @@ func (m *M6800) SEI_0f(mmu mem.MMU16) {
 func (m *M6800) BRA_20(mmu mem.MMU16) {
     offset := int32(int8(mmu.R8(m.PC))) + 2  // range -126..128
     m.PC -= 1
-    m.PC += uint16(offset)  // uint16(int32) will truncate properly (ie. no conversion), negative number math still works
+    // uint16(int32) will truncate properly (ie. no conversion), negative number handled properly
+    m.PC += uint16(offset)
 }
 
 func (m *M6800) CLR_4f(mmu mem.MMU16) {
     m.A = 0
+    m.CC |= 0x4   // set Z
+    m.CC &= 0xF4  // clear NVC
 }
 
 func (m *M6800) CLR_6f(mmu mem.MMU16) {
     mmu.W8(m.X + uint16(mmu.R8(m.PC)), 0)
+    m.CC |= 0x4   // set Z
+    m.CC &= 0xF4  // clear NVC
     m.PC += 1
 }
 
 func (m *M6800) LDA_86(mmu mem.MMU16) {
     m.A = mmu.R8(m.PC)
+    m.set_NZ8(m.A)
     m.PC += 1
 }
 
 func (m *M6800) LDS_8e(mmu mem.MMU16) {
     m.SP = mmu.R16(m.PC)
+    m.CC &= ^V  // clear overflow
+    m.set_NZ16(m.SP)
     m.PC += 2
 }
 
