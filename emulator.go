@@ -5,28 +5,24 @@ import (
     "io/ioutil"
     "log"
     "os"
-//    "time"
+    "time"
 
     "github.com/bartgrantham/fpemu/cpu/m6800"
     "github.com/bartgrantham/fpemu/mem"
     "github.com/bartgrantham/fpemu/mem/firepower"
+    "github.com/bartgrantham/fpemu/pia/m6821"
+    "github.com/bartgrantham/fpemu/ui"
     "github.com/gdamore/tcell"
 )
 
 /*
     draw disasm
     draw log!
-    accept keystroke runcommands
     load queue of commands from cli
-    free-run CPU
-*/
+    keys for: pause, step, 1x .1s .01s .001s
+    need pia + mapping
 
-func drawString(s tcell.Screen, x, y int, style tcell.Style, str string) {
-    for _, c := range str {
-        s.SetContent(x, y, c, []rune{}, style)
-        x += 1
-    }
-}
+*/
 
 func main() {
     if len(os.Args) < 5 {
@@ -43,8 +39,9 @@ func main() {
     ic6, _ := ioutil.ReadAll(f3)
     ic12, _ := ioutil.ReadAll(f4)
 
-    mmu := firepower.NewFirepowerMem(ic5, ic7, ic6, ic12)
-    m6800 := m6800.NewM6800(mmu)
+    pia := m6821.M6821{}
+    mmu := firepower.NewFirepowerMem(ic5, ic7, ic6, ic12, &pia)
+    m6800 := m6800.NewM6800(mmu, &pia)
 
     screen, err := tcell.NewScreen()
     if err != nil {
@@ -63,58 +60,55 @@ func main() {
         }
     }()
 
-    ctrl := make(chan string, 10)
+    dl := []ui.Draw{func(){
+        ramBox(screen, 3, 1, "IRAM", 0x0, mmu)
+//        ramBox(screen, 3, 13, "ORAM", 0x400, mmu)
+        cpuBox(screen, 64, 1, m6800)
+//        mmu.ClearPeekCounts()
+        ui.LogBox(screen, 3, 13, "Log")
+    }}
+
+    tui := ui.TextUI{
+        Screen:screen,
+        Tick:time.NewTicker(50 * time.Millisecond),
+        DisplayList:dl,
+    }
+    tui.Run()
+
+    ctrl := make(chan rune, 10)
     m6800.Run(mmu, ctrl)
 
     evtloop:
     for {
-        ramBox(screen, 3, 1, "IRAM", 0x0, mmu)
-        ramBox(screen, 3, 13, "ORAM", 0x400, mmu)
-        cpuBox(screen, 64, 1, m6800)
-        screen.Show()
-        mmu.ClearPeekCounts()
-        e := screen.PollEvent()
-        switch e := e.(type) {
-            case *tcell.EventKey:
-                if e.Key() == tcell.KeyCtrlC {
-                    break evtloop
+        evt := screen.PollEvent()
+        e, ok := evt.(*tcell.EventKey)
+        if ! ok {
+            continue
+        }
+        switch e.Key() {
+            case tcell.KeyCtrlC:
+                break evtloop
+            case tcell.KeyRune:
+                chr := e.Rune()
+                if chr >= 'a' && chr <= 'p' {
+                    ctrl <- chr
                 }
             default:
-                continue
+                ctrl <- '_'
         }
-        ctrl <- "next"
-        //m6800.Step(mmu)
     }
     screen.Fini()
-}
-
-func box(s tcell.Screen, x, y, w, h int) {
-    style := tcell.StyleDefault.Foreground(tcell.ColorGray)
-    // corners
-    s.SetContent(x, y, tcell.RuneULCorner, nil, style)
-    s.SetContent(x+w, y, tcell.RuneURCorner, nil, style)
-    s.SetContent(x, y+h, tcell.RuneLLCorner, nil, style)
-    s.SetContent(x+w, y+h, tcell.RuneLRCorner, nil, style)
-    // top/bottom
-    for col := x+1; col < x+w; col++ {
-        s.SetContent(col, y, tcell.RuneHLine, nil, style)
-        s.SetContent(col, y+h, tcell.RuneHLine, nil, style)
-    }
-    // left/right
-    for row := y+1; row < y+h; row++ {
-        s.SetContent(x, row, tcell.RuneVLine, nil, style)
-        s.SetContent(x+w, row, tcell.RuneVLine, nil, style)
-    }
+    ui.DumpLog()
 }
 
 // draw 128 bytes from ram
 func ramBox(s tcell.Screen, x, y int, label string, addr uint16, mem mem.MMU16) {
-    box(s, x, y, 57, 11)
+    ui.Box(s, x, y, 57, 11)
     style := tcell.StyleDefault.Foreground(tcell.ColorWhite).Underline(true)
     colhead := "x0 x1 x2 x3 x4 x5 x6 x7  x8 x9 xA xB xC xD xE xF"
-    drawString(s, x+8, y+2, style, colhead)
+    ui.DrawString(s, x+8, y+2, style, colhead)
     style = tcell.StyleDefault.Foreground(tcell.ColorWhite).Bold(true)
-    drawString(s, x+6, y, style, " "+label+" ")
+    ui.DrawString(s, x+6, y, style, " "+label+" ")
 
     row := 0
     for {
@@ -122,7 +116,7 @@ func ramBox(s tcell.Screen, x, y int, label string, addr uint16, mem mem.MMU16) 
         low := int(addr&0xF)
         if low == 0 {
             rowhead := fmt.Sprintf("$%.4X", addr&0xFFF0)
-            drawString(s, x+2, row+y+3, style, rowhead)
+            ui.DrawString(s, x+2, row+y+3, style, rowhead)
         }
         col := x + (low*3) + 4
         if low >= 8 {
@@ -140,7 +134,7 @@ func ramBox(s tcell.Screen, x, y int, label string, addr uint16, mem mem.MMU16) 
                 style = tcell.StyleDefault.Foreground(tcell.ColorGray)
         }
         cell := fmt.Sprintf("%.2X", val)
-        drawString(s, col+4, row+y+3, style, cell)
+        ui.DrawString(s, col+4, row+y+3, style, cell)
         addr += 1
         if (addr % 16) == 0 {
             row += 1
@@ -153,25 +147,25 @@ func ramBox(s tcell.Screen, x, y int, label string, addr uint16, mem mem.MMU16) 
 
 
 func cpuBox(s tcell.Screen, x, y int, cpu *m6800.M6800) {
-    box(s, x, y, 20, 11)
+    ui.Box(s, x, y, 20, 11)
     style := tcell.StyleDefault.Foreground(tcell.ColorWhite).Bold(true)
-    drawString(s, x+2, y, style, " M6802 ")
+    ui.DrawString(s, x+2, y, style, " M6802 ")
     style = tcell.StyleDefault.Foreground(tcell.ColorGray)
     col := x+2
     row := y+2
-    drawString(s, col, row, style, "PC:")
-    drawString(s, col, row+1, style, "SP:")
-    drawString(s, col, row+2, style, " X:")
-    drawString(s, col, row+3, style, " A:")
-    drawString(s, col, row+4, style, " B:")
-    drawString(s, col, row+6, style, "      --HINZVC")
-    drawString(s, col, row+7, style, "CC:")
+    ui.DrawString(s, col, row, style, "PC:")
+    ui.DrawString(s, col, row+1, style, "SP:")
+    ui.DrawString(s, col, row+2, style, " X:")
+    ui.DrawString(s, col, row+3, style, " A:")
+    ui.DrawString(s, col, row+4, style, " B:")
+    ui.DrawString(s, col, row+6, style, "      --HINZVC")
+    ui.DrawString(s, col, row+7, style, "CC:")
     style = tcell.StyleDefault.Foreground(tcell.ColorWhite)
     col = col + 4
-    drawString(s, col, row, style, fmt.Sprintf("$%.4X ($%.4X)", cpu.PC&0x7ff, cpu.PC))
-    drawString(s, col, row+1, style, fmt.Sprintf("$%.4X", cpu.SP))
-    drawString(s, col, row+2, style, fmt.Sprintf("$%.4X", cpu.X))
-    drawString(s, col, row+3, style, fmt.Sprintf("0x%.2X", cpu.A))
-    drawString(s, col, row+4, style, fmt.Sprintf("0x%.2X", cpu.B))
-    drawString(s, col, row+7, style, fmt.Sprintf("0b%.8b", cpu.CC))
+    ui.DrawString(s, col, row, style, fmt.Sprintf("$%.4X", cpu.PC))
+    ui.DrawString(s, col, row+1, style, fmt.Sprintf("$%.4X", cpu.SP))
+    ui.DrawString(s, col, row+2, style, fmt.Sprintf("$%.4X", cpu.X))
+    ui.DrawString(s, col, row+3, style, fmt.Sprintf("0x%.2X", cpu.A))
+    ui.DrawString(s, col, row+4, style, fmt.Sprintf("0x%.2X", cpu.B))
+    ui.DrawString(s, col, row+7, style, fmt.Sprintf("0b%.8b", cpu.CC))
 }
