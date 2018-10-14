@@ -20,17 +20,23 @@ func Log(msg string) {
 }
 
 func DumpLog() {
-    for i, _ := range circlog {
-        msg := circlog[999-i]
-        if msg != "" {
-            fmt.Println(i, msg)
+    j := 0
+    for i:=circlogidx; j<1000; i = (i+1) % 1000 {
+//    for i, _ := range circlog {
+//        msg := circlog[999-i]
+//        if msg != "" {
+//            fmt.Println(i, msg)
+//        }
+        if circlog[i] != "" {
+            fmt.Println(i, circlog[i])
         }
+        j++
     }
 }
 
 func LogBox(s tcell.Screen, x, y int, label string) {
     Box(s, x, y, 100, 15)
-    Clear(s, x+1, y+1, 98, 14)
+    Clear(s, x+1, y+1, 98, 13)
     style := tcell.StyleDefault.Foreground(tcell.ColorWhite).Bold(true)
     DrawString(s, x+2, y, style, " "+label+" ")
     for i:=0; i<12; i++ {

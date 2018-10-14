@@ -3,14 +3,23 @@ package m6800
 import (
     "fmt"
 //    "log"
+    "os"
     "time"
 
     "github.com/bartgrantham/fpemu/mem"
     "github.com/bartgrantham/fpemu/pia"
-//    "github.com/bartgrantham/fpemu/ui"
+    "github.com/bartgrantham/fpemu/ui"
+
+    "github.com/gdamore/tcell"
 )
 
-//var pia_buf uint8
+var crystal float32 = 3580000.0 / 2
+
+var wtflog *os.File
+
+func init() {
+   wtflog, _ = os.OpenFile("WTF.log", os.O_RDWR|os.O_CREATE, 0755) 
+}
 
 type M6800 struct {
     PC      uint16
@@ -45,14 +54,12 @@ func (m *M6800) Status() string {
     return fmt.Sprintf(fmtstr, m.PC, m.PC, m.X, m.A, m.B, m.CC, m.SP)
 }
 
-func (m *M6800) Step(mmu mem.MMU16) error {
-    mmu.ClearPeekCounts()
-//    if m.NMI || (m.IRQ && (m.CC & I == 0)) {
-//    ui.Log(fmt.Sprintf("PC: $%.4x  IRQ0:%v IRQ1:%v intmask:%v", m.PC, m.PIA.IRQ(0), m.PIA.IRQ(1), m.CC & I != I))
-//    ui.Log(fmt.Sprintf("%v", time.Now()))
+func (m *M6800) Step(mmu mem.MMU16) (int, error) {
+    ui.Log(m.Status())
     if (m.PIA.IRQ(0) || m.PIA.IRQ(1)) && (m.CC & I != I) {
         m.save_registers(mmu)
-        m.SEI_0f(mmu)  // interrupts masked
+        //m.SEI_0f(mmu)  // interrupts masked
+        SEI_0f(m, mmu)  // interrupts masked
         if m.NMI {
             m.PC = mmu.R16(0xFFFC)
         } else {
@@ -60,8 +67,20 @@ func (m *M6800) Step(mmu mem.MMU16) error {
         }
     }
     opcode := mmu.R8(m.PC)
+/*
+    fmt.Fprintf(wtflog, "%.2x\n", opcode)
+    first32 := "    "
+    for addr:=uint16(0); addr<0x20; addr++ {
+        val, _, _ := mmu.Peek8(addr)
+        first32 += fmt.Sprintf("%.2x  ", val)
+    }
+    fmt.Fprintln(wtflog, first32)
+    fmt.Fprintln(wtflog, "    :", m.Status())
+*/
     m.PC += 1
-    return m.dispatch(opcode, mmu)
+    count, err := m.dispatch(opcode, mmu)
+//    fmt.Fprintln(wtflog, "    :", m.Status())
+    return count, err
 }
 
 /*
@@ -85,22 +104,54 @@ On firepower port A is the DAC, port B is from the mainboard
 */
 
 
-func (m *M6800) Run(mmu mem.MMU16, ctrl chan rune) {
+func (m *M6800) Run(mmu mem.MMU16, ctrl chan rune, screen tcell.Screen) {
     var chr rune
     var tick *time.Ticker
-    tick = time.NewTicker(time.Millisecond)
+    rate := float32(8000) //125 * time.Microsecond
+    cycles_per_rate := crystal / rate
+    tick = time.NewTicker(time.Duration(float32(time.Second)/rate))
     _ = tick
+    var total, remainder float32
     go func() {
+/*
+        defer func() {
+            //if r := recover(); r != nil {
+            //}
+            screen.Fini()
+            ui.DumpLog()
+            for addr:=0; addr<0x80; addr++ {
+                if addr & 0x0F == 0x00 {
+                    fmt.Printf("$%.2x:  ", addr)
+                }
+                val, _, _ := mmu.Peek8(uint16(addr))
+                fmt.Printf("%.2x  ", val)
+                if addr & 0x0F == 0x0F {
+                    fmt.Println()
+                }
+            }
+        }()
+*/
         for {
             select {
                 case chr = <-ctrl:
-                    if chr >= 'a' && chr <= 'p' {
-                        m.PIA.Write(1, uint8(chr-'a'))
+                    if chr >= '0' && chr <= 'o' {
+                        m.PIA.Write(1, uint8(chr-'0'))
                     }
-                //case <-tick.C:
-                default:
-                    // run 1ms worth of cycles
-                    m.Step(mmu)
+                case <-tick.C:
+                    total = remainder
+//                    start := time.Now()
+                    // run one "rate" worth of cycles
+                    for {
+                        if total > cycles_per_rate {
+                            remainder = total - cycles_per_rate
+                            break
+                        }
+                        cycles, _ := m.Step(mmu)
+                        total += float32(cycles)
+                    }
+//                    ui.Log(fmt.Sprintf("%f cycles in %s", total, time.Since(start)))
+//                default:
+//                    m.Step(mmu)
             }
         }
     }()

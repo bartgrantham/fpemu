@@ -25,74 +25,64 @@ From the 1975 manual:
 
 */
 
-
-// TODO: turn this into a table w/ cycle counts, etc.
-func (m *M6800) dispatch(opcode uint8, mmu mem.MMU16) error {
-    switch opcode {
-        case 0x08: m.INX_08(mmu)
-        case 0x0e: m.CLI_0e(mmu)
-        case 0x0f: m.SEI_0f(mmu)
-        case 0x20: m.BRA_20(mmu)
-        case 0x26: m.BNE_26(mmu)
-        case 0x27: m.BEQ_27(mmu)
-        case 0x2a: m.BPL_2a(mmu)
-        case 0x32: m.PUL_32(mmu)
-//        case 0x33: m.PUL_33(mmu)  // untested
-        case 0x36: m.PSH_36(mmu)
-//        case 0x37: m.PSH_37(mmu)  // untested
-        case 0x39: m.RTS_39(mmu)
-        case 0x43: m.COM_43(mmu)
-        case 0x4c: m.INC_4c(mmu)
-        case 0x4f: m.CLR_4f(mmu)
-        case 0x53: m.COM_53(mmu)
-        case 0x5a: m.DEC_5a(mmu)
-        case 0x6f: m.CLR_6f(mmu)
-        case 0x7a: m.DEC_7a(mmu)
-        case 0x7c: m.INC_7c(mmu)
-        case 0x7d: m.TST_7d(mmu)
-        case 0x7e: m.JMP_7e(mmu)
-        case 0x7f: m.CLR_7f(mmu)
-        case 0x81: m.CMP_81(mmu)
-        case 0x84: m.AND_84(mmu)
-        case 0x85: m.BIT_85(mmu)
-        case 0x86: m.LDA_86(mmu)
-        case 0x89: m.ADC_89(mmu)
-        case 0x8e: m.LDS_8e(mmu)
-        case 0x96: m.LDA_96(mmu)
-        case 0x97: m.STA_97(mmu)
-        case 0x9b: m.ADD_9b(mmu)
-        case 0xa0: m.SUB_a0(mmu)
-        case 0xa6: m.LDA_a6(mmu)
-        case 0xa7: m.STA_a7(mmu)
-        case 0xb6: m.LDA_b6(mmu)
-        case 0xb7: m.STA_b7(mmu)
-        case 0xbd: m.JSR_bd(mmu)
-        case 0xc0: m.SUB_c0(mmu)
-        case 0xc1: m.CMP_c1(mmu)
-        case 0xc6: m.LDA_c6(mmu)
-        case 0xce: m.LDX_ce(mmu)
-        case 0xd6: m.LDA_d6(mmu)
-        case 0xd7: m.STA_d7(mmu)
-        case 0xde: m.LDX_de(mmu)
-        case 0xdf: m.STX_df(mmu)
-        case 0xe6: m.LDA_e6(mmu)
-        case 0xe7: m.STA_e7(mmu)
-        case 0xef: m.STX_ef(mmu)
-        case 0xf6: m.LDA_f6(mmu)
-        case 0xf7: m.STA_f7(mmu)
-        default:
-            m.unimplmented(opcode, mmu)
-    }
-    return nil
+var cyclecounts [256]int = [256]int{
+//  00  01  02  03  04  05  06  07  08  09  0A  0B  0C  0D  0E  0F
+    0,  2,  0,  0,  0,  0,  2,  2,  4,  4,  2,  2,  2,  2,  2,  2,  // 00
+    2,  2,  0,  0,  0,  0,  2,  2,  0,  2,  0,  2,  0,  0,  0,  0,  // 10
+    4,  0,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  // 20
+    4,  4,  4,  4,  4,  4,  4,  4,  0,  5,  0,  10, 0,  0,  9,  12, // 30
+    2,  0,  0,  2,  2,  0,  2,  2,  2,  2,  2,  0,  2,  2,  0,  2,  // 40
+    2,  0,  0,  2,  2,  0,  2,  2,  2,  2,  2,  0,  2,  2,  0,  2,  // 50
+    7,  0,  0,  7,  7,  0,  7,  7,  7,  7,  7,  0,  7,  7,  4,  7,  // 60
+    6,  0,  0,  6,  6,  0,  6,  6,  6,  6,  6,  0,  6,  6,  3,  6,  // 70
+    2,  2,  2,  0,  2,  2,  2,  0,  2,  2,  2,  2,  3,  8,  3,  0,  // 80
+    3,  3,  3,  0,  3,  3,  3,  4,  3,  3,  3,  3,  4,  0,  4,  5,  // 90
+    5,  5,  5,  0,  5,  5,  5,  6,  5,  5,  5,  5,  6,  8,  6,  7,  // A0
+    4,  4,  4,  0,  4,  4,  4,  5,  4,  4,  4,  4,  5,  9,  5,  6,  // B0
+    2,  2,  2,  0,  2,  2,  2,  0,  2,  2,  2,  2,  0,  0,  3,  0,  // C0
+    3,  3,  3,  0,  3,  3,  3,  4,  3,  3,  3,  3,  0,  0,  4,  5,  // D0
+    5,  5,  5,  0,  5,  5,  5,  6,  5,  5,  5,  5,  0,  0,  6,  7,  // E0
+    4,  4,  4,  0,  4,  4,  4,  5,  4,  4,  4,  4,  0,  0,  5,  6,  // F0
 }
 
-// Catch-all opcode
-func (m *M6800) unimplmented(opcode uint8, mmu mem.MMU16) {
-    status := fmt.Sprintf("\nUnimplmented opcode: %.2X\n    CPU status: %s", opcode, m.Status())
+var dispatch_table [256]func(*M6800, mem.MMU16) = [256]func(*M6800, mem.MMU16) {
+//  00      01      02      03      04      05      06      07      08      09      0A      0B      0C      0D      0E      0F
+    UNIMPL, NOP_01, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, INX_08, DEX_09, UNIMPL, UNIMPL, UNIMPL, UNIMPL, CLI_0e, SEI_0f, //00
+    SBA_10, CMP_11, UNIMPL, UNIMPL, UNIMPL, UNIMPL, TAB_16, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, //10
+    BRA_20, UNIMPL, UNIMPL, UNIMPL, BCC_24, UNIMPL, BNE_26, BEQ_27, UNIMPL, UNIMPL, BPL_2a, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, //20
+    UNIMPL, UNIMPL, PUL_32, UNIMPL, UNIMPL, UNIMPL, PSH_36, UNIMPL, UNIMPL, RTS_39, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, //30
+    UNIMPL, UNIMPL, UNIMPL, COM_43, UNIMPL, UNIMPL, UNIMPL, UNIMPL, ASL_48, UNIMPL, DEC_4a, UNIMPL, INC_4c, UNIMPL, UNIMPL, CLR_4f, //40
+    UNIMPL, UNIMPL, UNIMPL, COM_53, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, DEC_5a, UNIMPL, INC_5c, UNIMPL, UNIMPL, CLR_5f, //50
+    UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, TST_6d, JMP_6e, CLR_6f, //60
+    UNIMPL, UNIMPL, UNIMPL, COM_73, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, ROL_79, DEC_7a, UNIMPL, INC_7c, TST_7d, JMP_7e, CLR_7f, //70
+    UNIMPL, CMP_81, UNIMPL, UNIMPL, AND_84, BIT_85, LDA_86, UNIMPL, UNIMPL, ADC_89, UNIMPL, UNIMPL, CPX_8c, BSR_8d, LDS_8e, UNIMPL, //80
+    UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, LDA_96, STA_97, UNIMPL, UNIMPL, ORA_9a, ADD_9b, CPX_9c, UNIMPL, UNIMPL, UNIMPL, //90
+    SUB_a0, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, LDA_a6, STA_a7, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, //A0
+    UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, LDA_b6, STA_b7, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, JSR_bd, UNIMPL, UNIMPL, //B0
+    SUB_c0, CMP_c1, UNIMPL, UNIMPL, UNIMPL, UNIMPL, LDA_c6, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, LDX_ce, UNIMPL, //C0
+    UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, LDA_d6, STA_d7, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, LDX_de, STX_df, //D0
+    UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, LDA_e6, STA_e7, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, LDX_ee, STX_ef, //E0
+    UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, LDA_f6, STA_f7, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, UNIMPL, LDX_fe, UNIMPL, //F0
+//  00      01      02      03      04      05      06      07      08      09      0A      0B      0C      0D      0E      0F
+}
+
+var op uint8
+
+func (m *M6800) dispatch(opcode uint8, mmu mem.MMU16) (int, error) {
+    op = opcode
+    dispatch_table[opcode](m, mmu)
+    return cyclecounts[opcode], nil
+}
+
+func UNIMPL(m *M6800, mmu mem.MMU16) {
+    status := fmt.Sprintf("\nUnimplmented opcode: %.2X\n    CPU status: %s", op, m.Status())
     panic(status)
 }
 
-func (m *M6800) INX_08(mmu mem.MMU16) {
+func NOP_01(m *M6800, mmu mem.MMU16) {
+}
+
+func INX_08(m *M6800, mmu mem.MMU16) {
     m.X += 1
     if m.X == 0 {
         m.CC |= Z
@@ -101,119 +91,177 @@ func (m *M6800) INX_08(mmu mem.MMU16) {
     }
 }
 
-// CLI, clear interrupt flag (enables inerrupts)
-func (m *M6800) CLI_0e(mmu mem.MMU16) {
+func DEX_09(m *M6800, mmu mem.MMU16) {
+    m.X -= 1
+    if m.X == 0 {
+        m.CC |= Z
+    } else {
+        m.CC &= Z
+    }
+}
+
+func CLI_0e(m *M6800, mmu mem.MMU16) {
     m.CC &= ^I
 }
 
-// SEI, set interrupt flag (disables interrupts)
-func (m *M6800) SEI_0f(mmu mem.MMU16) {
+func SEI_0f(m *M6800, mmu mem.MMU16) {
     m.CC |= I
 }
 
-func (m *M6800) BRA_20(mmu mem.MMU16) {
-    offset := int32(int8(mmu.R8(m.PC))) + 2  // range -126..128
-    m.PC -= 1
-    // uint16(int32) will truncate properly (ie. no conversion), negative number handled properly
-    m.PC += uint16(offset)
+func SBA_10(m *M6800, mmu mem.MMU16) {
+    minuend := m.A
+    subtrahend := m.B
+    m.A = m.sub(minuend, subtrahend, false)
 }
 
-// maybe software int?
-func (m*M6800) save_registers(mmu mem.MMU16) {
-    mmu.W8(m.SP-0, m.CC)
-    mmu.W8(m.SP-1, m.B)
-    mmu.W8(m.SP-2, m.A)
-    mmu.W16(m.SP-4, m.X)
-    mmu.W16(m.SP-6, m.PC)
-    m.SP -= 7
+func CMP_11(m *M6800, mmu mem.MMU16) {
+    minuend := m.A
+    subtrahend := m.B
+    _ = m.sub(minuend, subtrahend, false)
 }
 
-func (m *M6800) BNE_26(mmu mem.MMU16) {
-    if m.CC & Z != Z {
-        offset := mmu.R8(m.PC)
-        m.PC += 1
-        if offset & 0x80 == 0x80 {
-            offset = (offset ^ 0xff)+1
-            m.PC -= uint16(offset)
-        } else {
-            m.PC += uint16(offset)
-        }
-    } else {
-        m.PC += 1
-    }
+func TAB_16(m *M6800, mmu mem.MMU16) {
+    m.B = m.A
+    m.CC &= ^V
+    m.set_NZ8(m.B)
 }
 
-func (m *M6800) BEQ_27(mmu mem.MMU16) {
-    if m.CC & Z == Z {
-        m.PC += uint16(mmu.R8(m.PC))
-    }
+func BRA_20(m *M6800, mmu mem.MMU16) {
+    offset := mmu.R8(m.PC)
     m.PC += 1
+    if offset & 0x80 == 0x80 {
+        offset = ^offset + 1
+        m.PC -= uint16(offset)
+    } else {
+        m.PC += uint16(offset)
+    }
 }
 
-func (m *M6800) BPL_2a(mmu mem.MMU16) {
-    if m.CC & N == 0 {
-        offset := mmu.R8(m.PC)
-        m.PC += 1
+func BCC_24(m *M6800, mmu mem.MMU16) {
+    offset := mmu.R8(m.PC)
+    m.PC += 1
+    if m.CC & C == 0 {
         if offset & 0x80 == 0x80 {
-            offset = (offset ^ 0xff)+1
+            offset = ^offset + 1
             m.PC -= uint16(offset)
         } else {
             m.PC += uint16(offset)
         }
-    } else {
-        m.PC += 1
     }
 }
 
-func (m *M6800) PUL_32(mmu mem.MMU16) {
+func BNE_26(m *M6800, mmu mem.MMU16) {
+    offset := mmu.R8(m.PC)
+    m.PC += 1
+    if m.CC & Z == 0 {
+        if offset & 0x80 == 0x80 {
+            offset = ^offset + 1
+            m.PC -= uint16(offset)
+        } else {
+            m.PC += uint16(offset)
+        }
+    }
+}
+
+func BEQ_27(m *M6800, mmu mem.MMU16) {
+    offset := mmu.R8(m.PC)
+    m.PC += 1
+    if m.CC & Z == Z {
+        if offset & 0x80 == 0x80 {
+            offset = ^offset + 1
+            m.PC -= uint16(offset)
+        } else {
+            m.PC += uint16(offset)
+        }
+    }
+}
+
+func BPL_2a(m *M6800, mmu mem.MMU16) {
+    offset := mmu.R8(m.PC)
+    m.PC += 1
+    if m.CC & N == 0 {
+        if offset & 0x80 == 0x80 {
+            offset = ^offset + 1
+            m.PC -= uint16(offset)
+        } else {
+            m.PC += uint16(offset)
+        }
+    }
+}
+
+func PUL_32(m *M6800, mmu mem.MMU16) {
     m.SP += 1
     m.A = mmu.R8(m.SP)
 }
 
-func (m *M6800) PUL_33(mmu mem.MMU16) {
+func PUL_33(m *M6800, mmu mem.MMU16) {
     m.SP += 1
     m.B = mmu.R8(m.SP)
 }
 
-func (m *M6800) PSH_36(mmu mem.MMU16) {
+func PSH_36(m *M6800, mmu mem.MMU16) {
     mmu.W8(m.SP, m.A)
     m.SP -= 1
 }
 
-func (m *M6800) PSH_37(mmu mem.MMU16) {
+func PSH_37(m *M6800, mmu mem.MMU16) {
     mmu.W8(m.SP, m.B)
     m.SP -= 1
 }
 
-func (m *M6800) RTS_39(mmu mem.MMU16) {
+func RTS_39(m *M6800, mmu mem.MMU16) {
     m.PC = mmu.R16(m.SP+1)
-    m.SP -= 2
+    m.SP += 2
 }
 
-func (m *M6800) RTI_3b(mmu mem.MMU16) {
-    //saved registers are restored and processing proceeds
-    panic("not yet")
-}
-
-func (m *M6800) COM_43(mmu mem.MMU16) {
-    m.A ^= 0xff
+func COM_43(m *M6800, mmu mem.MMU16) {
+    m.A = 0xff - m.A
     m.CC |= C
     m.CC &= ^V
     m.set_NZ8(m.A)
 }
 
-func (m *M6800) INC_4c(mmu mem.MMU16) {
-    m.A += 1
-    if m.A == 0x00 {
+func ASL_48(m *M6800, mmu mem.MMU16) {
+    if m.A & 0x80 == 0x80 {
+        m.CC |= C
+    } else {
+        m.CC &= ^C
+    }
+    m.A = m.A << 1
+    m.set_NZ8(m.A)
+    switch {
+        case (m.CC & N == N) && (m.CC & C == 0):
+            // negative, no carry
+            m.CC |= V
+        case (m.CC & N == 0) && (m.CC & C == C):
+            // positive, carry
+            m.CC |= V
+        default:
+            m.CC &= ^V
+    }
+}
+
+func DEC_4a(m *M6800, mmu mem.MMU16) {
+    if m.A == 0x80 {
         m.CC |= V
     } else {
         m.CC &= ^V
     }
+    m.A -= 1
     m.set_NZ8(m.A)
-    m.PC += 2
 }
 
-func (m *M6800) CLR_4f(mmu mem.MMU16) {
+func INC_4c(m *M6800, mmu mem.MMU16) {
+    if m.A == 0xff {
+        m.CC |= V
+    } else {
+        m.CC &= ^V
+    }
+    m.A += 1
+    m.set_NZ8(m.A)
+}
+
+func CLR_4f(m *M6800, mmu mem.MMU16) {
     m.A = 0
     // set Z, clear NVC
     m.CC |= Z
@@ -222,15 +270,14 @@ func (m *M6800) CLR_4f(mmu mem.MMU16) {
     m.CC &= ^C
 }
 
-func (m *M6800) COM_53(mmu mem.MMU16) {
-    m.B ^= 0xff
+func COM_53(m *M6800, mmu mem.MMU16) {
+    m.B = 0xff - m.B
     m.CC |= C
     m.CC &= ^V
     m.set_NZ8(m.B)
 }
 
-// 2's compliment?
-func (m *M6800) DEC_5a(mmu mem.MMU16) {
+func DEC_5a(m *M6800, mmu mem.MMU16) {
     if m.B == 0x80 {
         m.CC |= V
     } else {
@@ -240,7 +287,38 @@ func (m *M6800) DEC_5a(mmu mem.MMU16) {
     m.set_NZ8(m.B)
 }
 
-func (m *M6800) CLR_6f(mmu mem.MMU16) {
+func INC_5c(m *M6800, mmu mem.MMU16) {
+    if m.B == 0xff {
+        m.CC |= V
+    } else {
+        m.CC &= ^V
+    }
+    m.B += 1
+    m.set_NZ8(m.B)
+}
+
+func CLR_5f(m *M6800, mmu mem.MMU16) {
+    m.B = 0
+    // set Z, clear NVC
+    m.CC |= Z
+    m.CC &= ^N
+    m.CC &= ^V
+    m.CC &= ^C
+}
+
+func TST_6d(m *M6800, mmu mem.MMU16) {
+    tmp := mmu.R8(m.X + uint16(mmu.R8(m.PC)))
+    m.CC &= ^C
+    m.CC &= ^V
+    m.set_NZ8(tmp)
+    m.PC += 1
+}
+
+func JMP_6e(m *M6800, mmu mem.MMU16) {
+    m.PC = m.X + uint16(mmu.R8(m.PC))
+}
+
+func CLR_6f(m *M6800, mmu mem.MMU16) {
     mmu.W8(m.X + uint16(mmu.R8(m.PC)), 0)
     // set Z, clear NVC
     m.CC |= Z
@@ -250,7 +328,47 @@ func (m *M6800) CLR_6f(mmu mem.MMU16) {
     m.PC += 1
 }
 
-func (m *M6800) DEC_7a(mmu mem.MMU16) {
+func COM_73(m *M6800, mmu mem.MMU16) {
+    addr := mmu.R16(m.PC)
+    tmp := mmu.R8(addr)
+    tmp = 0xff - tmp
+    m.CC |= C
+    m.CC &= ^V
+    m.set_NZ8(tmp)  // BIG BUG WAS HERE
+    mmu.W8(addr, tmp)
+    m.PC += 2
+}
+
+// BIG BUG WAS HERE (left, not right)
+func ROL_79(m *M6800, mmu mem.MMU16) {
+    addr := mmu.R16(m.PC)
+    tmp := mmu.R8(addr)
+    wrap := m.CC & C == C
+    if tmp & 0x80 == 0x80 {
+        m.CC |= C
+    } else {
+        m.CC &= ^C
+    }
+    tmp = tmp << 1
+    if wrap {
+        tmp |= 0x01
+    }
+    m.set_NZ8(tmp)
+    switch {
+        case (m.CC & N == N) && (m.CC & C == 0):
+            // negative, no carry
+            m.CC |= V
+        case (m.CC & N == 0) && (m.CC & C == C):
+            // positive, carry
+            m.CC |= V
+        default:
+            m.CC &= ^V
+    }
+    mmu.W8(addr, tmp)
+    m.PC += 2
+}
+
+func DEC_7a(m *M6800, mmu mem.MMU16) {
     addr := mmu.R16(m.PC)
     tmp := mmu.R8(addr)
     if tmp == 0x80 {
@@ -264,34 +382,35 @@ func (m *M6800) DEC_7a(mmu mem.MMU16) {
     m.PC += 2
 }
 
-func (m *M6800) INC_7c(mmu mem.MMU16) {
-    tmp := mmu.R8(mmu.R16(m.PC)) + 1
-    mmu.W8(mmu.R16(m.PC), tmp)
-    if tmp == 0 {
+func INC_7c(m *M6800, mmu mem.MMU16) {
+    addr := mmu.R16(m.PC)
+    tmp := mmu.R8(addr)
+    if tmp == 0xff {
         m.CC |= V
     } else {
         m.CC &= ^V
     }
+    tmp += 1
     m.set_NZ8(tmp)
+    mmu.W8(addr, tmp)
     m.PC += 2
 }
 
-func (m *M6800) TST_7d(mmu mem.MMU16) {
-    tmp := mmu.R8(m.PC)
+func TST_7d(m *M6800, mmu mem.MMU16) {
+    tmp := mmu.R8(mmu.R16(m.PC))
     m.CC &= ^C
     m.CC &= ^V
     m.set_NZ8(tmp)
     m.PC += 2
 }
 
-func (m *M6800) JMP_7e(mmu mem.MMU16) {
+func JMP_7e(m *M6800, mmu mem.MMU16) {
     m.PC = mmu.R16(m.PC)
-    m.PC += 2
 }
 
-func (m *M6800) CLR_7f(mmu mem.MMU16) {
+func CLR_7f(m *M6800, mmu mem.MMU16) {
     mmu.W8(mmu.R16(m.PC), 0)
-    m.A = 0
+    //m.A = 0  // BIG BUG WAS HERE
     // set Z, clear NVC
     m.CC |= Z
     m.CC &= ^N
@@ -300,233 +419,262 @@ func (m *M6800) CLR_7f(mmu mem.MMU16) {
     m.PC += 2
 }
 
-func (m *M6800) CMP_81(mmu mem.MMU16) {
+func CMP_81(m *M6800, mmu mem.MMU16) {
     minuend := m.A
     subtrahend := mmu.R8(m.PC)
-    _ = m.sub(minuend, subtrahend)
+    _ = m.sub(minuend, subtrahend, false)
     m.PC += 1
 }
 
-func (m *M6800) AND_84(mmu mem.MMU16) {
+func AND_84(m *M6800, mmu mem.MMU16) {
     m.A &= mmu.R8(m.PC)
     m.CC &= ^V
     m.set_NZ8(m.A)
     m.PC += 1
 }
 
-func (m *M6800) BIT_85(mmu mem.MMU16) {
+func BIT_85(m *M6800, mmu mem.MMU16) {
     m.CC &= ^V
     m.set_NZ8(m.A & mmu.R8(m.PC))
     m.PC += 1
 }
 
-func (m *M6800) LDA_86(mmu mem.MMU16) {
+func LDA_86(m *M6800, mmu mem.MMU16) {
     m.A = mmu.R8(m.PC)
     m.CC &= ^V
     m.set_NZ8(m.A)
     m.PC += 1
 }
 
-func (m *M6800) ADC_89(mmu mem.MMU16) {
+func ADC_89(m *M6800, mmu mem.MMU16) {
     augend := m.A
-    addend := mmu.R8(uint16(mmu.R8(m.PC)))
-    var sum uint8
-    if m.CC & C == 0 {
-        sum = augend + addend
-    } else {
-        sum = augend + addend + 1
-    }
-    if (augend & 0x80) != (sum & 0x80) {
-       m.CC |= C
-    } else {
-       m.CC &= ^C
-    }
-    if add_V(augend, addend, sum) {
-        m.CC |= V
-    } else {
-        m.CC &= ^V
-    }
-    if sum & 0x0f > 0x09 {
-        m.CC |= H
-    } else {
-        m.CC &= ^H
-    }
-    m.set_NZ8(sum)
-    m.A = sum
+    addend := mmu.R8(m.PC)
+    m.A = m.add(augend, addend, true)
     m.PC += 1
 }
 
-func (m *M6800) LDS_8e(mmu mem.MMU16) {
+func CPX_8c(m *M6800, mmu mem.MMU16) {
+    tmp := mmu.R16(m.PC)
+    // incorrect: affects the carry flag, it should only effect VNZ, but this is easier
+    _ = m.sub(uint8(m.X>>8), uint8(tmp>>8), false)
+    m.PC += 2
+}
+
+func BSR_8d(m *M6800, mmu mem.MMU16) {
+    offset := mmu.R8(m.PC)
+    m.PC += 1
+    mmu.W16(m.SP-1, m.PC)
+    m.SP -= 2
+    if offset & 0x80 == 0x80 {
+        offset = ^offset + 1
+        m.PC -= uint16(offset)
+    } else {
+        m.PC += uint16(offset)
+    }
+}
+
+func LDS_8e(m *M6800, mmu mem.MMU16) {
     m.SP = mmu.R16(m.PC)
     m.CC &= ^V
     m.set_NZ16(m.SP)
     m.PC += 2
 }
 
-func (m *M6800) LDA_96(mmu mem.MMU16) {
+func LDA_96(m *M6800, mmu mem.MMU16) {
     m.A = mmu.R8(uint16(mmu.R8(m.PC)))
     m.CC &= ^V
     m.set_NZ8(m.A)
     m.PC += 1
 }
 
-func (m *M6800) STA_97(mmu mem.MMU16) {
+func STA_97(m *M6800, mmu mem.MMU16) {
     mmu.W8(uint16(mmu.R8(m.PC)), m.A)
     m.CC &= ^V
     m.set_NZ8(m.A)
     m.PC += 1
 }
 
-func (m *M6800) ADD_9b(mmu mem.MMU16) {
+func ORA_9a(m *M6800, mmu mem.MMU16) {
+    m.A &= mmu.R8(uint16(mmu.R8(m.PC)))
+    m.CC &= ^V
+    m.set_NZ8(m.A)
+    m.PC += 1
+}
+
+func ADD_9b(m *M6800, mmu mem.MMU16) {
     augend := m.A
     addend := mmu.R8(uint16(mmu.R8(m.PC)))
-    sum := augend + addend
-    if (augend & 0x80) != (sum & 0x80) {
-       m.CC |= C
-    } else {
-       m.CC &= ^C
-    }
-    if add_V(augend, addend, sum) {
-        m.CC |= V
-    } else {
-        m.CC &= ^V
-    }
-    if sum & 0x0f > 0x09 {
-        m.CC |= H
-    } else {
-        m.CC &= ^H
-    }
-    m.set_NZ8(sum)
+    sum := m.add(augend, addend, false)
     m.A = sum
     m.PC += 1
 }
 
-func (m *M6800) SUB_a0(mmu mem.MMU16) {
+func CPX_9c(m *M6800, mmu mem.MMU16) {
+    tmp := mmu.R16(uint16(mmu.R8(m.PC)))
+    // incorrect: affects the carry flag, it should only effect VNZ, but this is easier
+    _ = m.sub(uint8(m.X>>8), uint8(tmp>>8), false)
+}
+
+func SUB_a0(m *M6800, mmu mem.MMU16) {
     minuend := m.A
     subtrahend := mmu.R8(m.X + uint16(mmu.R8(m.PC)))
-    m.A = m.sub(minuend, subtrahend)
+    m.A = m.sub(minuend, subtrahend, false)
     m.PC += 1
 }
 
-func (m *M6800) LDA_a6(mmu mem.MMU16) {
-    m.A = mmu.R8(m.X + uint16(mmu.R8(m.PC)))
-    m.CC &= ^V  // clear overflow
+func LDA_a6(m *M6800, mmu mem.MMU16) {
+    addr := m.X + uint16(mmu.R8(m.PC))
+    m.A = mmu.R8(addr)
+    m.CC &= ^V
     m.set_NZ8(m.A)
     m.PC += 1
 }
 
-func (m *M6800) STA_a7(mmu mem.MMU16) {
-    mmu.W8(m.X + uint16(mmu.R8(m.PC)), m.A)
+func STA_a7(m *M6800, mmu mem.MMU16) {
+    addr := m.X + uint16(mmu.R8(m.PC))
+    mmu.W8(addr, m.A)
+    m.CC &= ^V
+    m.set_NZ8(m.A)
     m.PC += 1
 }
 
-func (m *M6800) LDA_b6(mmu mem.MMU16) {
+func LDA_b6(m *M6800, mmu mem.MMU16) {
     m.A = mmu.R8(mmu.R16(m.PC))
-    m.CC &= ^V  // clear overflow
+    m.CC &= ^V
     m.set_NZ8(m.A)
     m.PC += 2
 }
 
-func (m *M6800) STA_b7(mmu mem.MMU16) {
+func STA_b7(m *M6800, mmu mem.MMU16) {
     mmu.W8(mmu.R16(m.PC), m.A)
     m.CC &= ^V
     m.set_NZ8(m.A)
     m.PC += 2
 }
 
-
-func (m *M6800) JSR_bd(mmu mem.MMU16) {
+func JSR_bd(m *M6800, mmu mem.MMU16) {
     mmu.W16(m.SP-1, m.PC+2)
     m.SP -= 2
     m.PC = mmu.R16(m.PC)
 }
 
-func (m *M6800) SUB_c0(mmu mem.MMU16) {
+func SUB_c0(m *M6800, mmu mem.MMU16) {
     minuend := m.B
     subtrahend := mmu.R8(m.PC)
-    m.B = m.sub(minuend, subtrahend)
+    m.B = m.sub(minuend, subtrahend, false)
     m.PC += 1
 }
 
-func (m *M6800) CMP_c1(mmu mem.MMU16) {
+func CMP_c1(m *M6800, mmu mem.MMU16) {
     minuend := m.B
     subtrahend := mmu.R8(m.PC)
-    _ = m.sub(minuend, subtrahend)
+    _ = m.sub(minuend, subtrahend, false)
     m.PC += 1
 }
 
-func (m *M6800) LDA_c6(mmu mem.MMU16) {
+func LDA_c6(m *M6800, mmu mem.MMU16) {
     m.B = mmu.R8(m.PC)
+    m.CC &= ^V
+    m.set_NZ8(m.B)
     m.PC += 1
 }
 
-func (m *M6800) LDX_ce(mmu mem.MMU16) {
+func LDX_ce(m *M6800, mmu mem.MMU16) {
     m.X = mmu.R16(m.PC)
+    m.CC &= ^V
+    m.set_NZ16(m.X)
     m.PC += 2
 }
 
-func (m *M6800) LDA_d6(mmu mem.MMU16) {
+func LDA_d6(m *M6800, mmu mem.MMU16) {
     m.B = mmu.R8(uint16(mmu.R8(m.PC)))
     m.CC &= ^V
     m.set_NZ8(m.B)
     m.PC += 1
 }
 
-func (m *M6800) STA_d7(mmu mem.MMU16) {
+func STA_d7(m *M6800, mmu mem.MMU16) {
     mmu.W8(uint16(mmu.R8(m.PC)), m.B)
     m.CC &= ^V
     m.set_NZ8(m.B)
     m.PC += 1
 }
 
-func (m *M6800) LDX_de(mmu mem.MMU16) {
+func LDX_de(m *M6800, mmu mem.MMU16) {
     m.X = mmu.R16(uint16(mmu.R8(m.PC)))
+    m.CC &= ^V
+    m.set_NZ16(m.X)
     m.PC += 1
 }
 
-func (m *M6800) STX_df(mmu mem.MMU16) {
+func STX_df(m *M6800, mmu mem.MMU16) {
     mmu.W16(uint16(mmu.R8(m.PC)), m.X)
     m.CC &= ^V
     m.set_NZ16(m.X)
     m.PC += 1
 }
 
-func (m *M6800) LDA_e6(mmu mem.MMU16) {
+func LDA_e6(m *M6800, mmu mem.MMU16) {
     m.B = mmu.R8(m.X + uint16(mmu.R8(m.PC)))
-    m.CC &= ^V  // clear overflow
+    m.CC &= ^V
     m.set_NZ8(m.B)
     m.PC += 1
 }
 
-func (m *M6800) STA_e7(mmu mem.MMU16) {
+func STA_e7(m *M6800, mmu mem.MMU16) {
     mmu.W8(m.X + uint16(mmu.R8(m.PC)), m.B)
+    m.CC &= ^V
+    m.set_NZ8(m.B)
     m.PC += 1
 }
 
-func (m *M6800) STX_ef(mmu mem.MMU16) {
-    //mmu.W16(uint16(mmu.R8(m.PC)), m.X)
+func LDX_ee(m *M6800, mmu mem.MMU16) {
+    m.X = mmu.R16(m.X + uint16(mmu.R8(m.PC)))
+    m.CC &= ^V
+    m.set_NZ16(m.X)
+    m.PC += 1
+}
+
+func STX_ef(m *M6800, mmu mem.MMU16) {
     mmu.W16(m.X + uint16(mmu.R8(m.PC)), m.X)
     m.CC &= ^V
     m.set_NZ16(m.X)
     m.PC += 1
 }
 
-func (m *M6800) LDA_f6(mmu mem.MMU16) {
-    m.B = mmu.R8(m.PC)
-    m.CC &= ^V  // clear overflow
+func LDA_f6(m *M6800, mmu mem.MMU16) {
+    m.B = mmu.R8(mmu.R16(m.PC))
+    m.CC &= ^V
     m.set_NZ8(m.B)
     m.PC += 2
 }
 
-func (m *M6800) STA_f7(mmu mem.MMU16) {
+func STA_f7(m *M6800, mmu mem.MMU16) {
     mmu.W8(mmu.R16(m.PC), m.B)
     m.CC &= ^V
     m.set_NZ8(m.B)
     m.PC += 2
 }
 
-// flags: HI NZVC
-//        21 8421
+func LDX_fe(m *M6800, mmu mem.MMU16) {
+    m.X = mmu.R16(mmu.R16(m.PC))
+    m.CC &= ^V
+    m.set_NZ16(m.X)
+    m.PC += 2
+}
+
+func (m*M6800) save_registers(mmu mem.MMU16) {
+    // [CC][B ][A ][Xh][Xl][Ph][Pl]  
+    mmu.W16(m.SP-1, m.PC)
+    mmu.W16(m.SP-3, m.X)
+    mmu.W8(m.SP-4, m.A)
+    mmu.W8(m.SP-5, m.B)
+    mmu.W8(m.SP-6, m.CC)
+    m.SP -= 7
+}
+
+// flags: --HI NZVC
+//        8421 8421
 
 func (m *M6800) set_NZ8(val uint8) {
     if val == 0 {
@@ -554,24 +702,70 @@ func (m *M6800) set_NZ16(val uint16) {
     }
 }
 
-func add_V(augend, addend, sum uint8) bool {
-    ausign := augend & 0x80 == 0x80
-    adsign := addend & 0x80 == 0x80
-    ssign  := sum & 0x80 == 0x80
-    // false == positive, true == negative!
-    switch {
-        case !ausign && !adsign && ssign:
-            // positive + positive == negative
-            return true
-        case ausign && adsign && !ssign:
-            // negative + negative == positive
-            return true
+// common function to all ADD and ADC opcodes, handles flags, but caller handles advancing PC
+func (m *M6800) add(augend, addend uint8, withcarry bool) uint8 {
+    sum := augend + addend
+    if withcarry && (m.CC & C == C) {
+        sum += 1
     }
-    return false
+    augsign := augend & 0x80 == 0x80
+    addsign := addend & 0x80 == 0x80
+    sumsign := sum & 0x80 == 0x80
+
+    // carry if the following
+    // * both operands have high bit (negative)
+    // * either of operand has high bit (negative) but the sum doesn't (positive)
+    switch {
+        case augsign && addsign:
+            // negative + negative == _
+            m.CC |= C
+        case addsign && !sumsign:
+            // _ + negative == positive
+            m.CC |= C
+        case augsign && !sumsign:
+            // negative + _ == positive
+            m.CC |= C
+        default:
+            m.CC &= ^C
+    }
+
+    // overflow if the following
+    // * both operands have high bit (negative), but sum doesn't (positive)
+    // * both operands have no high bit (positive), but the sum does (negative)
+    switch {
+        case !augsign && !addsign && sumsign:
+            // positive + positive == negative
+            m.CC |= V
+        case augsign && addsign && !sumsign:
+            // negative + negative == positive
+            m.CC |= V
+        default:
+            m.CC &= ^V
+    }
+
+    aughalf := augend & 0x08 == 0x08
+    addhalf := addend & 0x08 == 0x08
+    sumhalf := sum & 0x08 == 0x08
+    // half-carry if the following
+    // * both operands have bit 3 set (>7)
+    // * either operand has bit 3 clear (<8), but the sum doesn't (>7)  ???XXX???
+    switch {
+        case aughalf && addhalf:
+            m.CC |= H
+        case !aughalf && sumhalf:
+            m.CC |= H
+        case !addhalf && sumhalf:
+            m.CC |= H
+        default:
+            m.CC &= ^H
+    }
+
+    m.set_NZ8(sum)
+    return sum
 }
 
 // common function to all SUB and CMP opcodes, handles flags but caller handles advancing PC
-func (m *M6800) sub(minuend, subtrahend uint8) uint8 {
+func (m *M6800) sub(minuend, subtrahend uint8, withcarry bool) uint8 {
     difference := minuend + (^subtrahend + 1)
 
     // carry

@@ -3,7 +3,7 @@ package main
 import (
     "fmt"
     "io/ioutil"
-    "log"
+//    "log"
     "os"
     "time"
 
@@ -20,6 +20,7 @@ import (
     load queue of commands from cli
     keys for: pause, step, 1x .1s .01s .001s
     draw PIA output
+    command-line switches for roms, clocks
 */
 
 func main() {
@@ -31,6 +32,7 @@ func main() {
     f2, _ := os.Open(os.Args[2])
     f3, _ := os.Open(os.Args[3])
     f4, _ := os.Open(os.Args[4])
+    //f5, _ := os.OpenFile(os.Args[5], os.O_RDWR|os.O_CREATE, 0755)
 
     ic7, _ := ioutil.ReadAll(f1)
     ic5, _ := ioutil.ReadAll(f2)
@@ -42,31 +44,28 @@ func main() {
     mmu := firepower.NewFirepowerMem(ic5, ic7, ic6, ic12, &pia)
     m6800 := m6800.NewM6800(mmu, &pia)
 
-/*
-Audio:
-
-* remember: the callback will consume the entire buffer in a single blast
-    * doubling of missing samples will result in a single sample correct followed by a hundred incorrect ones
-    *
-*/
-    // Init audio
     // Init PIA->DAC
     m6821_OUTA := make(chan uint8, 1024)
     in_rate := float32(8000)
     in_rate_ns := time.Duration(float32(time.Second)/in_rate)
-    
+    //filebuf := make([]byte, 256)
+    //i := 0
     go func() {
         var tick *time.Ticker
         tick = time.NewTicker(in_rate_ns)
         for {
             <-tick.C
-            m6821_OUTA <- pia.ORA & pia.DDRA
-//            m6821_OUTA <- 0
-//            m6821_OUTA <- 255
+            m6821_OUTA <- pia.ORA //& pia.DDRA
+            //filebuf[i%256] = pia.ORA & pia.DDRA
+            //if i%256 == 255 {
+            //    f5.Write([]byte(filebuf))
+            //}
+            //i += 1
         }
     }()
+    time.Sleep(in_rate_ns * time.Duration(len(m6821_OUTA)))  // let the buffer fill up
 
-    time.Sleep(100 * time.Millisecond)
+    // Init host audio
     out_rate := float32(44100)
     in_per_out := in_rate / out_rate
     callback := func() func([]float32) {
@@ -82,7 +81,7 @@ Audio:
                 if tick > 1 {
                     select {
                         case piaout = <-m6821_OUTA:
-                            samp = float32(piaout) / float32(256)
+                            samp = float32(piaout) / float32(1024)
                         default:
                             // underflow? use the last sample, I guess
                     }
@@ -92,30 +91,13 @@ Audio:
         }
     }()
     err := ui.StartAudio(callback)
-/*
-    err := ui.StartAudio(func (out []float32){
-        var left, right float32
-        for i := range out {
-            select {
-                default:
-                    if i < 2 {
-                    
-                    } else {
-                    }
-            }
-        
-            out[i] = float32(<- m6821_OUTA) / float32(256)
-            //out[i] = float32(i) / float32(len(out))
-        }
-    })
-*/
     if err != nil {
         fmt.Println("Couldn't start audio:", err)
         os.Exit(-1)
     }
     defer ui.StopAudio()
 
-    // Init screen
+    // Init UI
     screen, err := tcell.NewScreen()
     if err != nil {
         fmt.Println("Error opening screen:", err)
@@ -125,20 +107,12 @@ Audio:
         fmt.Println("Error opening screen:", err)
         os.Exit(-1)
     }
-    defer func() {
-        if r := recover(); r != nil {
-            screen.Fini()
-            log.Println("Error:", r)
-            os.Exit(-1)
-        }
-    }()
 
     // Run UI
     dl := []ui.Draw{func(){
         ramBox(screen, 3, 1, "IRAM", 0x0, mmu)
 //        ramBox(screen, 3, 13, "ORAM", 0x400, mmu)
         cpuBox(screen, 64, 1, m6800)
-//        mmu.ClearPeekCounts()
         ui.LogBox(screen, 3, 13, "Log")
     }}
     tui := ui.TextUI{
@@ -148,10 +122,16 @@ Audio:
     }
     tui.Run()
 
-
     // Run emulation
     ctrl := make(chan rune, 10)
-    m6800.Run(mmu, ctrl)
+    m6800.Run(mmu, ctrl, screen)
+
+    defer func() {
+        //if r := recover(); r != nil {
+        //}
+        screen.Fini()
+        //ui.DumpLog()
+    }()
 
     evtloop:
     for {
@@ -165,15 +145,13 @@ Audio:
                 break evtloop
             case tcell.KeyRune:
                 chr := e.Rune()
-                if chr >= 'a' && chr <= 'p' {
+                if chr >= '0' && chr <= 'o' {
                     ctrl <- chr
                 }
             default:
                 ctrl <- '_'
         }
     }
-    screen.Fini()
-    ui.DumpLog()
 }
 
 // draw 128 bytes from ram
