@@ -7,20 +7,22 @@ import (
 
     "github.com/bartgrantham/fpemu/mem"
     "github.com/bartgrantham/fpemu/pia"
-    "github.com/bartgrantham/fpemu/ui"
+//    "github.com/bartgrantham/fpemu/ui"
 )
 
 //var pia_buf uint8
 
 type M6800 struct {
-    PC   uint16
-    X    uint16
-    A    uint8
-    B    uint8
-    CC   uint8
-    SP   uint16
-    PIA  pia.PIA
-    NMI  bool
+    PC      uint16
+    X       uint16
+    A       uint8
+    B       uint8
+    CC      uint8
+    SP      uint16
+    PIA     pia.PIA
+    NMI     bool
+//    cps     float64
+//    cycles  float64
 }
 
 const (
@@ -46,7 +48,8 @@ func (m *M6800) Status() string {
 func (m *M6800) Step(mmu mem.MMU16) error {
     mmu.ClearPeekCounts()
 //    if m.NMI || (m.IRQ && (m.CC & I == 0)) {
-    ui.Log(fmt.Sprintf("PC: $%.4x  IRQ0:%v IRQ1:%v intmask:%v", m.PC, m.PIA.IRQ(0), m.PIA.IRQ(1), m.CC & I != I))
+//    ui.Log(fmt.Sprintf("PC: $%.4x  IRQ0:%v IRQ1:%v intmask:%v", m.PC, m.PIA.IRQ(0), m.PIA.IRQ(1), m.CC & I != I))
+//    ui.Log(fmt.Sprintf("%v", time.Now()))
     if (m.PIA.IRQ(0) || m.PIA.IRQ(1)) && (m.CC & I != I) {
         m.save_registers(mmu)
         m.SEI_0f(mmu)  // interrupts masked
@@ -83,18 +86,20 @@ On firepower port A is the DAC, port B is from the mainboard
 
 
 func (m *M6800) Run(mmu mem.MMU16, ctrl chan rune) {
+    var chr rune
     var tick *time.Ticker
-    tick = time.NewTicker(100 * time.Millisecond)
+    tick = time.NewTicker(time.Millisecond)
+    _ = tick
     go func() {
         for {
             select {
-                case chr := <-ctrl:
+                case chr = <-ctrl:
                     if chr >= 'a' && chr <= 'p' {
-                        //mmu.W8(pia_addr, uint8(chr-'a'))
                         m.PIA.Write(1, uint8(chr-'a'))
                     }
-                    m.Step(mmu)
-                case <-tick.C:
+                //case <-tick.C:
+                default:
+                    // run 1ms worth of cycles
                     m.Step(mmu)
             }
         }

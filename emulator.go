@@ -17,11 +17,9 @@ import (
 
 /*
     draw disasm
-    draw log!
     load queue of commands from cli
     keys for: pause, step, 1x .1s .01s .001s
-    need pia + mapping
-
+    draw PIA output
 */
 
 func main() {
@@ -39,10 +37,85 @@ func main() {
     ic6, _ := ioutil.ReadAll(f3)
     ic12, _ := ioutil.ReadAll(f4)
 
+    // Init emulation
     pia := m6821.M6821{}
     mmu := firepower.NewFirepowerMem(ic5, ic7, ic6, ic12, &pia)
     m6800 := m6800.NewM6800(mmu, &pia)
 
+/*
+Audio:
+
+* remember: the callback will consume the entire buffer in a single blast
+    * doubling of missing samples will result in a single sample correct followed by a hundred incorrect ones
+    *
+*/
+    // Init audio
+    // Init PIA->DAC
+    m6821_OUTA := make(chan uint8, 1024)
+    in_rate := float32(8000)
+    in_rate_ns := time.Duration(float32(time.Second)/in_rate)
+    
+    go func() {
+        var tick *time.Ticker
+        tick = time.NewTicker(in_rate_ns)
+        for {
+            <-tick.C
+            m6821_OUTA <- pia.ORA & pia.DDRA
+//            m6821_OUTA <- 0
+//            m6821_OUTA <- 255
+        }
+    }()
+
+    time.Sleep(100 * time.Millisecond)
+    out_rate := float32(44100)
+    in_per_out := in_rate / out_rate
+    callback := func() func([]float32) {
+        var samp float32
+        var tick float32
+        var i int
+        var piaout uint8
+        return func (out []float32) {
+            for i=0; i<len(out); i+=2 {
+                out[i] = samp
+                out[i+1] = samp
+                tick += in_per_out
+                if tick > 1 {
+                    select {
+                        case piaout = <-m6821_OUTA:
+                            samp = float32(piaout) / float32(256)
+                        default:
+                            // underflow? use the last sample, I guess
+                    }
+                    tick -= 1
+                }
+            }
+        }
+    }()
+    err := ui.StartAudio(callback)
+/*
+    err := ui.StartAudio(func (out []float32){
+        var left, right float32
+        for i := range out {
+            select {
+                default:
+                    if i < 2 {
+                    
+                    } else {
+                    }
+            }
+        
+            out[i] = float32(<- m6821_OUTA) / float32(256)
+            //out[i] = float32(i) / float32(len(out))
+        }
+    })
+*/
+    if err != nil {
+        fmt.Println("Couldn't start audio:", err)
+        os.Exit(-1)
+    }
+    defer ui.StopAudio()
+
+    // Init screen
     screen, err := tcell.NewScreen()
     if err != nil {
         fmt.Println("Error opening screen:", err)
@@ -60,6 +133,7 @@ func main() {
         }
     }()
 
+    // Run UI
     dl := []ui.Draw{func(){
         ramBox(screen, 3, 1, "IRAM", 0x0, mmu)
 //        ramBox(screen, 3, 13, "ORAM", 0x400, mmu)
@@ -67,14 +141,15 @@ func main() {
 //        mmu.ClearPeekCounts()
         ui.LogBox(screen, 3, 13, "Log")
     }}
-
     tui := ui.TextUI{
         Screen:screen,
-        Tick:time.NewTicker(50 * time.Millisecond),
+        Tick:time.NewTicker(25 * time.Millisecond),
         DisplayList:dl,
     }
     tui.Run()
 
+
+    // Run emulation
     ctrl := make(chan rune, 10)
     m6800.Run(mmu, ctrl)
 

@@ -35,6 +35,7 @@ func (m *M6800) dispatch(opcode uint8, mmu mem.MMU16) error {
         case 0x20: m.BRA_20(mmu)
         case 0x26: m.BNE_26(mmu)
         case 0x27: m.BEQ_27(mmu)
+        case 0x2a: m.BPL_2a(mmu)
         case 0x32: m.PUL_32(mmu)
 //        case 0x33: m.PUL_33(mmu)  // untested
         case 0x36: m.PSH_36(mmu)
@@ -46,6 +47,7 @@ func (m *M6800) dispatch(opcode uint8, mmu mem.MMU16) error {
         case 0x53: m.COM_53(mmu)
         case 0x5a: m.DEC_5a(mmu)
         case 0x6f: m.CLR_6f(mmu)
+        case 0x7a: m.DEC_7a(mmu)
         case 0x7c: m.INC_7c(mmu)
         case 0x7d: m.TST_7d(mmu)
         case 0x7e: m.JMP_7e(mmu)
@@ -63,7 +65,9 @@ func (m *M6800) dispatch(opcode uint8, mmu mem.MMU16) error {
         case 0xa6: m.LDA_a6(mmu)
         case 0xa7: m.STA_a7(mmu)
         case 0xb6: m.LDA_b6(mmu)
+        case 0xb7: m.STA_b7(mmu)
         case 0xbd: m.JSR_bd(mmu)
+        case 0xc0: m.SUB_c0(mmu)
         case 0xc1: m.CMP_c1(mmu)
         case 0xc6: m.LDA_c6(mmu)
         case 0xce: m.LDX_ce(mmu)
@@ -81,8 +85,6 @@ func (m *M6800) dispatch(opcode uint8, mmu mem.MMU16) error {
     }
     return nil
 }
-
-
 
 // Catch-all opcode
 func (m *M6800) unimplmented(opcode uint8, mmu mem.MMU16) {
@@ -146,6 +148,21 @@ func (m *M6800) BEQ_27(mmu mem.MMU16) {
         m.PC += uint16(mmu.R8(m.PC))
     }
     m.PC += 1
+}
+
+func (m *M6800) BPL_2a(mmu mem.MMU16) {
+    if m.CC & N == 0 {
+        offset := mmu.R8(m.PC)
+        m.PC += 1
+        if offset & 0x80 == 0x80 {
+            offset = (offset ^ 0xff)+1
+            m.PC -= uint16(offset)
+        } else {
+            m.PC += uint16(offset)
+        }
+    } else {
+        m.PC += 1
+    }
 }
 
 func (m *M6800) PUL_32(mmu mem.MMU16) {
@@ -212,6 +229,7 @@ func (m *M6800) COM_53(mmu mem.MMU16) {
     m.set_NZ8(m.B)
 }
 
+// 2's compliment?
 func (m *M6800) DEC_5a(mmu mem.MMU16) {
     if m.B == 0x80 {
         m.CC |= V
@@ -230,6 +248,20 @@ func (m *M6800) CLR_6f(mmu mem.MMU16) {
     m.CC &= ^V
     m.CC &= ^C
     m.PC += 1
+}
+
+func (m *M6800) DEC_7a(mmu mem.MMU16) {
+    addr := mmu.R16(m.PC)
+    tmp := mmu.R8(addr)
+    if tmp == 0x80 {
+        m.CC |= V
+    } else {
+        m.CC &= ^V
+    }
+    tmp -= 1
+    m.set_NZ8(tmp)
+    mmu.W8(addr, tmp)
+    m.PC += 2
 }
 
 func (m *M6800) INC_7c(mmu mem.MMU16) {
@@ -271,20 +303,6 @@ func (m *M6800) CLR_7f(mmu mem.MMU16) {
 func (m *M6800) CMP_81(mmu mem.MMU16) {
     minuend := m.A
     subtrahend := mmu.R8(m.PC)
-/*
-    if minuend < subtrahend {
-        m.CC |= C
-    } else {
-        m.CC &= ^C
-    }
-    difference := minuend + (^subtrahend + 1)
-    if cmp_V(minuend, subtrahend, difference) {
-        m.CC |= V
-    } else {
-        m.CC &= ^V
-    }
-    m.set_NZ8(difference)
-*/
     _ = m.sub(minuend, subtrahend)
     m.PC += 1
 }
@@ -386,20 +404,6 @@ func (m *M6800) ADD_9b(mmu mem.MMU16) {
 func (m *M6800) SUB_a0(mmu mem.MMU16) {
     minuend := m.A
     subtrahend := mmu.R8(m.X + uint16(mmu.R8(m.PC)))
-/*
-    if minuend < subtrahend {
-        m.CC |= C
-    } else {
-        m.CC &= ^C
-    }
-    difference := minuend + (^subtrahend + 1)
-    if cmp_V(minuend, subtrahend, difference) {
-        m.CC |= V
-    } else {
-        m.CC &= ^V
-    }
-    m.set_NZ8(difference)
-*/
     m.A = m.sub(minuend, subtrahend)
     m.PC += 1
 }
@@ -423,29 +427,30 @@ func (m *M6800) LDA_b6(mmu mem.MMU16) {
     m.PC += 2
 }
 
+func (m *M6800) STA_b7(mmu mem.MMU16) {
+    mmu.W8(mmu.R16(m.PC), m.A)
+    m.CC &= ^V
+    m.set_NZ8(m.A)
+    m.PC += 2
+}
+
+
 func (m *M6800) JSR_bd(mmu mem.MMU16) {
     mmu.W16(m.SP-1, m.PC+2)
     m.SP -= 2
     m.PC = mmu.R16(m.PC)
 }
 
+func (m *M6800) SUB_c0(mmu mem.MMU16) {
+    minuend := m.B
+    subtrahend := mmu.R8(m.PC)
+    m.B = m.sub(minuend, subtrahend)
+    m.PC += 1
+}
+
 func (m *M6800) CMP_c1(mmu mem.MMU16) {
     minuend := m.B
     subtrahend := mmu.R8(m.PC)
-/*
-    if minuend < subtrahend {
-        m.CC |= C
-    } else {
-        m.CC &= ^C
-    }
-    difference := minuend + (^subtrahend + 1)
-    if cmp_V(minuend, subtrahend, difference) {
-        m.CC |= V
-    } else {
-        m.CC &= ^V
-    }
-    m.set_NZ8(difference)
-*/
     _ = m.sub(minuend, subtrahend)
     m.PC += 1
 }
@@ -594,21 +599,3 @@ func (m *M6800) sub(minuend, subtrahend uint8) uint8 {
     m.set_NZ8(difference)
     return difference
 }
-
-/*
-func cmp_V(minuend, subtrahend, difference uint8) bool {
-    msign := minuend & 0x80 == 0x80
-    ssign := subtrahend & 0x80 == 0x80
-    dsign := difference & 0x80 == 0x80
-    // false == positive, true == negative!
-    switch {
-        case !msign && ssign && dsign:
-            // positive - negative == negative
-            return true
-        case msign && !ssign && !dsign:
-            // negative - positive == positive
-            return true
-    }
-    return false
-}
-*/

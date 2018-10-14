@@ -7,23 +7,23 @@ import (
     "github.com/gdamore/tcell"
 )
 
-var log []string //= make([]string, 1000)
-var logidx int
+var circlog []string //= make([]string, 1000)
+var circlogidx int
 
 func init() {
-    log = make([]string, 1000)
+    circlog = make([]string, 1000)
 }
 
 func Log(msg string) {
-    log[logidx] = msg
-    logidx = (logidx+1) % 1000
+    circlog[circlogidx] = msg
+    circlogidx = (circlogidx+1) % 1000
 }
 
 func DumpLog() {
-    for i, _ := range log {
-        msg := log[999-i]
+    for i, _ := range circlog {
+        msg := circlog[999-i]
         if msg != "" {
-            fmt.Println(msg)
+            fmt.Println(i, msg)
         }
     }
 }
@@ -33,12 +33,12 @@ func LogBox(s tcell.Screen, x, y int, label string) {
     Clear(s, x+1, y+1, 98, 14)
     style := tcell.StyleDefault.Foreground(tcell.ColorWhite).Bold(true)
     DrawString(s, x+2, y, style, " "+label+" ")
-    for i:=0; i<13; i++ {
-        li := logidx-12+i
+    for i:=0; i<12; i++ {
+        li := circlogidx-12+i
         if li < 0 {
             li += 1000
         }
-        DrawString(s, x+2, y+2+i, style, fmt.Sprintf("%d %s", li, log[li]))
+        DrawString(s, x+2, y+2+i, style, fmt.Sprintf("%d %s", li, circlog[li]))
     }
 }
 

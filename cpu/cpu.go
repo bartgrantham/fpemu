@@ -1,4 +1,4 @@
-package main
+package cpu
 
 import (
     "github.com/bartgrantham/fpemu/mem"
