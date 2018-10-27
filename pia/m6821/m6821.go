@@ -24,6 +24,7 @@ const (
     //   1       1     : set/reset Cx2 level (low | high)
     Cx2_1
     Cx2_2
+    // IRQx2 and IRQx1 are read-only
     IRQx2
     // When Cx2 is an input, IRQx2 goes high on active transition of Cx2, cleared by MPU read of A/B
     // When Cx2 is an output, IRQx2 is always zero (not affected by Cx2 transitions)
@@ -43,7 +44,6 @@ type M6821 struct {
 }
 
 func (m *M6821) R8(addr uint16) uint8 {
-//ui.Log(fmt.Sprintf("here2 %.4x", addr))
     switch addr {
         case 0:
             if m.CRA & DDRx == 0 {
@@ -56,8 +56,6 @@ func (m *M6821) R8(addr uint16) uint8 {
         case 1:
             return m.CRA
         case 2:
-//ui.Log(fmt.Sprintf("R82WTF: %v", m.CRB & DDRx))
-//fmt.Printf("W8CRA 0x%.2x\n", val)
             if m.CRB & DDRx == 0 {
                 return m.DDRB
             } else {
@@ -66,7 +64,7 @@ func (m *M6821) R8(addr uint16) uint8 {
                 return (m.ORB & m.DDRB) | (m.INB & ^m.DDRB)  // input + output, appropriately masked
             }
         case 3:
-            return m.CRA
+            return m.CRB
         default:
             panic(fmt.Sprintf("Unknown register 0x%.4X", addr))
     }
@@ -77,26 +75,20 @@ func (m *M6821) W8(addr uint16, val uint8) {
     switch addr {
         case 0:
             if m.CRA & DDRx == 0 {
-//ui.Log(fmt.Sprintf("W8DDRA 0x%.4x %d %b", addr, m.CRA & DDRx, val))
                 m.DDRA = val
             } else {
-//ui.Log(fmt.Sprintf("W8ORA 0x%.4x %d %b", addr, m.CRA & DDRx, val))
                 m.ORA = val
             }
         case 1:
-//ui.Log(fmt.Sprintf("W8CRA 0x%.2x", val))
             m.CRA = val & 0x3F
         case 2:
 
             if m.CRB & DDRx == 0 {
-//ui.Log(fmt.Sprintf("W8DDRB 0x%.4x %d %b", addr, m.CRB & DDRx, val))
                 m.DDRB = val
             } else {
-//ui.Log(fmt.Sprintf("W8ORB 0x%.4x %d %b", addr, m.CRB & DDRx, val))
                 m.ORB = val
             }
         case 3:
-//ui.Log(fmt.Sprintf("W8CRB 0x%.2x", val))
             m.CRB = val & 0x3F
         default:
             panic(fmt.Sprintf("Unknown register 0x%.4X", addr))

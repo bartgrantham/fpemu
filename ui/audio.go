@@ -49,10 +49,6 @@ func StartAudio(cb func([]float32)) error {
                 i, d.Name, d.MaxOutputChannels, d.DefaultSampleRate/1000, d.DefaultLowOutputLatency, d.DefaultHighOutputLatency)
         }
     }
-    //fmt.Print(prompt + ": ")
-    //if echo {
-    //    fmt.Scan(&response)
-    //
     do, _ := portaudio.DefaultOutputDevice()
     fmt.Println("Using output device:")
     fmt.Println("    OUT: ", do)

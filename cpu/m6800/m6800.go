@@ -2,18 +2,19 @@ package m6800
 
 import (
     "fmt"
-//    "log"
+    "log"
     "os"
     "time"
 
     "github.com/bartgrantham/fpemu/mem"
     "github.com/bartgrantham/fpemu/pia"
+    "github.com/bartgrantham/fpemu/pia/m6821"
     "github.com/bartgrantham/fpemu/ui"
 
     "github.com/gdamore/tcell"
 )
 
-var crystal float32 = 3580000.0 / 2
+var crystal float32 = 3580000.0
 
 var wtflog *os.File
 
@@ -55,7 +56,7 @@ func (m *M6800) Status() string {
 }
 
 func (m *M6800) Step(mmu mem.MMU16) (int, error) {
-    ui.Log(m.Status())
+    //ui.Log(m.Status())
     if (m.PIA.IRQ(0) || m.PIA.IRQ(1)) && (m.CC & I != I) {
         m.save_registers(mmu)
         //m.SEI_0f(mmu)  // interrupts masked
@@ -103,11 +104,44 @@ func (m *M6800) Step(mmu mem.MMU16) (int, error) {
 On firepower port A is the DAC, port B is from the mainboard
 */
 
+func (m *M6800) Callback(mmu mem.MMU16, ctrl chan rune, pia *m6821.M6821) func([]float32) {
+    var chr rune
+// this calculation is probably all wrong...
+    rate := float32(44100)
+    cycles_per_sample := crystal / rate
+log.Printf("crystal %.8f, cps %.8f\n", crystal, cycles_per_sample)
+    var total_cycles, elapsed, samp float32
+    var i int
+    return func(out []float32) {
+        total_cycles = 0
+        start := time.Now()
+        for i=0; i<len(out); i+=2 {
+            select {
+                case chr = <-ctrl:
+                    if chr >= '0' && chr <= 'o' {
+                        m.PIA.Write(1, uint8(chr-'0'))
+                    }
+                default:
+            }
+            cycles, _ := m.Step(mmu)
+            elapsed += float32(cycles)
+            total_cycles += elapsed
+            if elapsed > cycles_per_sample {
+                samp = float32(pia.ORA) / float32(256)
+                out[i] = samp
+                out[i+1] = samp
+                elapsed -= cycles_per_sample
+                continue
+            }
+        }
+        ui.Log(fmt.Sprintf("%.0f cycles for %d samples in %v", total_cycles, len(out) / 2, time.Since(start)))
+    }
+}
 
 func (m *M6800) Run(mmu mem.MMU16, ctrl chan rune, screen tcell.Screen) {
     var chr rune
     var tick *time.Ticker
-    rate := float32(8000) //125 * time.Microsecond
+    rate := float32(100)
     cycles_per_rate := crystal / rate
     tick = time.NewTicker(time.Duration(float32(time.Second)/rate))
     _ = tick

@@ -16,11 +16,25 @@ import (
 )
 
 /*
+    currently: doing some disassemply to determine where the CVSD waveforms are, but this may not be clear until a LOT of it has been documented
+
     draw disasm
     load queue of commands from cli
     keys for: pause, step, 1x .1s .01s .001s
     draw PIA output
     command-line switches for roms, clocks
+
+    Dump both the 8k and the 44.1k raw to files and see if they mostly match
+    Take a hard look at the PIA code, maybe it's not writing the DAC sample properly?
+    Why doesn't the NMI return?
+    Find firepower .wav files online and check to see if the first samples produced match expectations
+    I've got opcode issues.  Is FA88 ever called?  There are instructions in there that I never execute (like BMI)
+
+    Simpler version: CPU class emits samples after N clocks have passed
+
+    Emulate CVSD
+        Maybe start by writing a stand-alone decoder and run the ROM through it, as is
+        if that works, tweak decay and ramp of the integrator to get it to sound relatively smooth
 */
 
 func main() {
@@ -40,13 +54,15 @@ func main() {
     ic12, _ := ioutil.ReadAll(f4)
 
     // Init emulation
+    ctrl := make(chan rune, 10)
     pia := m6821.M6821{}
     mmu := firepower.NewFirepowerMem(ic5, ic7, ic6, ic12, &pia)
     m6800 := m6800.NewM6800(mmu, &pia)
 
     // Init PIA->DAC
+/*
     m6821_OUTA := make(chan uint8, 1024)
-    in_rate := float32(8000)
+    in_rate := float32(100)
     in_rate_ns := time.Duration(float32(time.Second)/in_rate)
     //filebuf := make([]byte, 256)
     //i := 0
@@ -64,10 +80,13 @@ func main() {
         }
     }()
     time.Sleep(in_rate_ns * time.Duration(len(m6821_OUTA)))  // let the buffer fill up
+*/
 
     // Init host audio
+/*
     out_rate := float32(44100)
     in_per_out := in_rate / out_rate
+
     callback := func() func([]float32) {
         var samp float32
         var tick float32
@@ -91,6 +110,8 @@ func main() {
         }
     }()
     err := ui.StartAudio(callback)
+*/
+    err := ui.StartAudio(m6800.Callback(mmu, ctrl, &pia))
     if err != nil {
         fmt.Println("Couldn't start audio:", err)
         os.Exit(-1)
@@ -123,8 +144,7 @@ func main() {
     tui.Run()
 
     // Run emulation
-    ctrl := make(chan rune, 10)
-    m6800.Run(mmu, ctrl, screen)
+//    m6800.Run(mmu, ctrl, screen)
 
     defer func() {
         //if r := recover(); r != nil {

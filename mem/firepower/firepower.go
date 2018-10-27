@@ -104,6 +104,9 @@ func (m *FirepowerMem) W8(addr uint16, val uint8) {
 }
 
 func (m *FirepowerMem) R16(addr uint16) uint16 {
+    if addr == 0xFA88 {
+        panic("FA88")
+    }
     var high, low uint8
     m.reads[addr] += 1
     m.reads[addr+1] += 1
