@@ -2,6 +2,7 @@ package firepower
 
 import (
     "fmt"
+//"log"
     "github.com/bartgrantham/fpemu/pia"
 )
 
@@ -104,9 +105,6 @@ func (m *FirepowerMem) W8(addr uint16, val uint8) {
 }
 
 func (m *FirepowerMem) R16(addr uint16) uint16 {
-    if addr == 0xFA88 {
-        panic("FA88")
-    }
     var high, low uint8
     m.reads[addr] += 1
     m.reads[addr+1] += 1
@@ -118,12 +116,15 @@ func (m *FirepowerMem) R16(addr uint16) uint16 {
 //            high = m.ORAM[addr-0x400]
 //            low  = m.ORAM[addr-0x400+1]
         case addr >= 0xB000 && addr <= 0xBFFE:
+//            panic("B000")
             high = m.IC7[addr-0xB000]
             low  = m.IC7[addr-0xB000+1]
         case addr >= 0xC000 && addr <= 0xCFFE:
+//            panic("C000")
             high = m.IC5[addr-0xC000]
             low  = m.IC5[addr-0xC000+1]
         case addr >= 0xD000 && addr <= 0xDFFE:
+//            panic("D000")
             high = m.IC6[addr-0xD000]
             low  = m.IC6[addr-0xD000+1]
         case addr >= 0xF800 && addr <= 0xFFFE:

@@ -10,13 +10,42 @@ import (
     "github.com/bartgrantham/fpemu/cpu/m6800"
     "github.com/bartgrantham/fpemu/mem"
     "github.com/bartgrantham/fpemu/mem/firepower"
+    "github.com/bartgrantham/fpemu/misc/hc55516"
     "github.com/bartgrantham/fpemu/pia/m6821"
     "github.com/bartgrantham/fpemu/ui"
     "github.com/gdamore/tcell"
 )
 
 /*
-    currently: doing some disassemply to determine where the CVSD waveforms are, but this may not be clear until a LOT of it has been documented
+    wrong rom order!
+    go run emulator.go V_IC7.532 V_IC5.532 V_IC6.532 SOUND3.716; stty $sanity
+
+    Pretty sure I need to do another opcode trace on some of the "too fast" ones (I, J, M), they should
+        be awesome phasing sounds instead of little blips
+
+    Sounds not accurate:
+    * 3 : probably perfect, might want to check again
+    * 7 : missing "YOU ARE DESTROYED", the sound also plays WAY TOO FAST
+    * 8 : missing "YOU WON ONE MISSION", instead I hear a sound?
+    * c : missing "MISSION ACCOMPLISHED"
+    * d : missing "FIRE"
+    * e : missing "ENEMY DESTROYED"
+    * f : missing "FIRE POWER MISSING ACCOMPLISHED", the sweep should be noise instead of tone
+    * 12 : screeching instead of cool "engine" sound
+    * 13 : silence (correct?)
+    * 14 : should be ball launch sound (seems to be reading from ROM, sound file?)
+    * 15 : missing "MISSION ONE", different sound (mine is "engine" sound, video is slow laser beam sweep)
+    * 17 : sweep should be noise instead of tone?
+    * 18 : "FIRE ONE" followed by BRRRR, I have a weird tone
+    * 19 : definitely wrong, should be awesome phase bewwwwwww sound
+    * 1a : "POWER", followed by another cool phasing bewwww sound
+    * 1b : "FIRE DESTROYED YOU", followed by a really cool Robotron sound
+    * 1c : AWESOME phasing sound
+    * 1d : AWESOME phasing sound
+    * 1e : "FIRE POWER", 1c in reverse?
+    * 1f : "FIRE POWER", another awesome sweeping sound
+
+    * doing some disassemply to determine where the CVSD waveforms are, but this may not be clear until a LOT of it has been documented
 
     draw disasm
     load queue of commands from cli
@@ -26,10 +55,7 @@ import (
 
     Dump both the 8k and the 44.1k raw to files and see if they mostly match
     Take a hard look at the PIA code, maybe it's not writing the DAC sample properly?
-    Why doesn't the NMI return?
     Find firepower .wav files online and check to see if the first samples produced match expectations
-    I've got opcode issues.  Is FA88 ever called?  There are instructions in there that I never execute (like BMI)
-
     Simpler version: CPU class emits samples after N clocks have passed
 
     Emulate CVSD
@@ -55,7 +81,8 @@ func main() {
 
     // Init emulation
     ctrl := make(chan rune, 10)
-    pia := m6821.M6821{}
+    cvsd := hc55516.CVSD{}
+    pia := m6821.M6821{CVSD:cvsd}
     mmu := firepower.NewFirepowerMem(ic5, ic7, ic6, ic12, &pia)
     m6800 := m6800.NewM6800(mmu, &pia)
 
@@ -147,9 +174,10 @@ func main() {
 //    m6800.Run(mmu, ctrl, screen)
 
     defer func() {
-        //if r := recover(); r != nil {
-        //}
+        if r := recover(); r != nil {
+        }
         screen.Fini()
+        fmt.Println(m6800.Status())
         //ui.DumpLog()
     }()
 

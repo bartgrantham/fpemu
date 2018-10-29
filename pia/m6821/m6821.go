@@ -3,7 +3,8 @@ package m6821
 import (
     "fmt"
 
-//    "github.com/bartgrantham/fpemu/ui"
+    "github.com/bartgrantham/fpemu/ui"
+    "github.com/bartgrantham/fpemu/misc/hc55516"
 )
 
 /*
@@ -40,6 +41,7 @@ type M6821 struct {
 
     INA, INB    uint8  // from the outside world
     CA1, CA2, CB1, CB2 bool
+    CVSD        hc55516.CVSD
 //    hist []uint8
 }
 
@@ -61,6 +63,7 @@ func (m *M6821) R8(addr uint16) uint8 {
             } else {
                 m.CRB &= ^(IRQx2 | IRQx1) // clear interrupt registers
                 m.IRQB = false  // FIX
+ui.Log(fmt.Sprintf("read PIAB: %X %X %X %X %X %X\n", m.ORB, m.INB, m.DDRB, m.ORB & m.DDRB, m.INB & ^m.DDRB, (m.ORB & m.DDRB) | (m.INB & ^m.DDRB)))
                 return (m.ORB & m.DDRB) | (m.INB & ^m.DDRB)  // input + output, appropriately masked
             }
         case 3:
@@ -81,8 +84,14 @@ func (m *M6821) W8(addr uint16, val uint8) {
             }
         case 1:
             m.CRA = val & 0x3F
+            if m.CRA & (Cx2_1 | Cx2_2) == (Cx2_1 | Cx2_2) {
+                if m.CRA & Cx2_0 == Cx2_0 {
+                    m.CA2 = true
+                } else {
+                    m.CA2 = false
+                }
+            }
         case 2:
-
             if m.CRB & DDRx == 0 {
                 m.DDRB = val
             } else {
@@ -90,6 +99,17 @@ func (m *M6821) W8(addr uint16, val uint8) {
             }
         case 3:
             m.CRB = val & 0x3F
+            if m.CRB & (Cx2_1 | Cx2_2) == (Cx2_1 | Cx2_2) {
+                if m.CRB & Cx2_0 == Cx2_0 {
+                    if m.CB2 == false {
+                        // positive edge
+                        m.CVSD.Addbit(m.CA2)
+                    }
+                    m.CB2 = true
+                } else {
+                    m.CB2 = false
+                }
+            }
         default:
             panic(fmt.Sprintf("Unknown register 0x%.4X", addr))
     }

@@ -9,12 +9,12 @@ import (
     "github.com/bartgrantham/fpemu/mem"
     "github.com/bartgrantham/fpemu/pia"
     "github.com/bartgrantham/fpemu/pia/m6821"
-    "github.com/bartgrantham/fpemu/ui"
+//    "github.com/bartgrantham/fpemu/ui"
 
     "github.com/gdamore/tcell"
 )
 
-var crystal float32 = 3580000.0
+var crystal float32 = 3580000.0 / 4
 
 var wtflog *os.File
 
@@ -68,19 +68,20 @@ func (m *M6800) Step(mmu mem.MMU16) (int, error) {
         }
     }
     opcode := mmu.R8(m.PC)
+    m.PC += 1
+    count, err := m.dispatch(opcode, mmu)
 /*
-    fmt.Fprintf(wtflog, "%.2x\n", opcode)
+    fmt.Fprintln(wtflog, "", m.Status())
     first32 := "    "
     for addr:=uint16(0); addr<0x20; addr++ {
         val, _, _ := mmu.Peek8(addr)
-        first32 += fmt.Sprintf("%.2x  ", val)
+        first32 += fmt.Sprintf("%.2x ", val)
+        if addr % 4 == 3 {
+            first32 += " "
+        }
     }
     fmt.Fprintln(wtflog, first32)
-    fmt.Fprintln(wtflog, "    :", m.Status())
 */
-    m.PC += 1
-    count, err := m.dispatch(opcode, mmu)
-//    fmt.Fprintln(wtflog, "    :", m.Status())
     return count, err
 }
 
@@ -105,10 +106,45 @@ On firepower port A is the DAC, port B is from the mainboard
 */
 
 func (m *M6800) Callback(mmu mem.MMU16, ctrl chan rune, pia *m6821.M6821) func([]float32) {
+    var code rune
+// this calculation is probably all wrong...
+    hostrate := float32(44100)
+    cycles_per_sample := crystal / hostrate
+log.Printf("crystal %.8f, cps %.8f\n", crystal, cycles_per_sample)
+    var jitter, samp float32
+    var i, total_cycles int
+    return func(out []float32) {
+        total_cycles = 0
+//        start := time.Now()
+        for i=0; i<len(out); i+=2 {
+            select {
+                case code = <-ctrl:
+                    char := uint8(code)
+                    if char >= '0' && char <= 'o' {
+                        m.PIA.Write(1, (char-0x10)^0xFF)  // 0x30 == '0' -> 00-1f
+                    }
+                default:
+            }
+            for jitter < 0 {
+                cycles, _ := m.Step(mmu)
+                jitter += float32(cycles)
+                total_cycles += cycles
+            }
+            samp = float32(pia.ORA) / float32(256)
+            //samp += pia.CVSD.State * 4
+            out[i] = samp
+            out[i+1] = samp
+            jitter -= cycles_per_sample
+        }
+//        ui.Log(fmt.Sprintf("%dcyc, %dsamp in %v, jitter %.4f", total_cycles, len(out) / 2, time.Since(start), jitter))
+    }
+}
+/*
+func (m *M6800) Callback(mmu mem.MMU16, ctrl chan rune, pia *m6821.M6821) func([]float32) {
     var chr rune
 // this calculation is probably all wrong...
-    rate := float32(44100)
-    cycles_per_sample := crystal / rate
+    audiorate := float32(44100)
+    cycles_per_sample := crystal / audiorate
 log.Printf("crystal %.8f, cps %.8f\n", crystal, cycles_per_sample)
     var total_cycles, elapsed, samp float32
     var i int
@@ -137,6 +173,7 @@ log.Printf("crystal %.8f, cps %.8f\n", crystal, cycles_per_sample)
         ui.Log(fmt.Sprintf("%.0f cycles for %d samples in %v", total_cycles, len(out) / 2, time.Since(start)))
     }
 }
+*/
 
 func (m *M6800) Run(mmu mem.MMU16, ctrl chan rune, screen tcell.Screen) {
     var chr rune
