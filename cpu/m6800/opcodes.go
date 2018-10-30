@@ -107,10 +107,12 @@ func DEX_09(m *M6800, mmu mem.MMU16) {
     }
 }
 
+// *
 func CLI_0e(m *M6800, mmu mem.MMU16) {
     m.CC &= ^I
 }
 
+// *
 func SEI_0f(m *M6800, mmu mem.MMU16) {
     m.CC |= I
 }
@@ -122,6 +124,7 @@ func SBA_10(m *M6800, mmu mem.MMU16) {
     m.A = m.sub(minuend, subtrahend, false)
 }
 
+// *
 func CMP_11(m *M6800, mmu mem.MMU16) {
     minuend := m.A
     subtrahend := m.B
@@ -177,11 +180,12 @@ func BHI_22(m *M6800, mmu mem.MMU16) {
     }
 }
 
+// *
 func BLS_23(m *M6800, mmu mem.MMU16) {
     offset := mmu.R8(m.PC)
     m.PC += 1
     // carry or the result was zero
-    if m.CC & (C | Z) != 0 {
+    if (m.CC & C == C) || (m.CC & Z == Z) {
         if offset & 0x80 == 0x80 {
             offset = ^offset + 1
             m.PC -= uint16(offset)
@@ -191,6 +195,7 @@ func BLS_23(m *M6800, mmu mem.MMU16) {
     }
 }
 
+// *
 func BCC_24(m *M6800, mmu mem.MMU16) {
     offset := mmu.R8(m.PC)
     m.PC += 1
@@ -246,6 +251,7 @@ func BEQ_27(m *M6800, mmu mem.MMU16) {
     }
 }
 
+// *
 func BPL_2a(m *M6800, mmu mem.MMU16) {
     offset := mmu.R8(m.PC)
     m.PC += 1
@@ -320,6 +326,7 @@ func LSR_44(m *M6800, mmu mem.MMU16) {
     m.set_NZ8(m.A)
 }
 
+// *
 func ASL_48(m *M6800, mmu mem.MMU16) {
     if m.A & 0x80 == 0x80 {
         m.CC |= C
@@ -481,10 +488,10 @@ func CLR_6f(m *M6800, mmu mem.MMU16) {
     m.PC += 1
 }
 
+// *
 func COM_73(m *M6800, mmu mem.MMU16) {
     addr := mmu.R16(m.PC)
-    tmp := mmu.R8(addr)
-    tmp = 0xff - tmp
+    tmp := ^mmu.R8(addr)
     m.CC |= C
     m.CC &= ^V
     m.set_NZ8(tmp)
@@ -603,6 +610,7 @@ func CLR_7f(m *M6800, mmu mem.MMU16) {
     m.PC += 2
 }
 
+// *
 func SUB_80(m *M6800, mmu mem.MMU16) {
     minuend := m.A
     subtrahend := mmu.R8(uint16(m.PC))
@@ -656,11 +664,11 @@ func ORA_8a(m *M6800, mmu mem.MMU16) {
     m.PC += 1
 }
 
+// *
 func ADD_8b(m *M6800, mmu mem.MMU16) {
     augend := m.A
     addend := mmu.R8(m.PC)
-    sum := m.add(augend, addend, false)
-    m.A = sum
+    m.A = m.add(augend, addend, false)
     m.PC += 1
 }
 
@@ -693,6 +701,7 @@ func LDS_8e(m *M6800, mmu mem.MMU16) {
     m.PC += 2
 }
 
+// *
 func CMP_91(m *M6800, mmu mem.MMU16) {
     minuend := m.A
     subtrahend := mmu.R8(uint16(mmu.R8(m.PC)))
@@ -716,6 +725,7 @@ func STA_97(m *M6800, mmu mem.MMU16) {
     m.PC += 1
 }
 
+// *
 func EOR_98(m *M6800, mmu mem.MMU16) {
     m.A ^= mmu.R8(uint16(mmu.R8(m.PC)))
     m.CC &= ^V
@@ -795,17 +805,13 @@ func ADD_ab(m *M6800, mmu mem.MMU16) {
     m.PC += 1
 }
 
+// *
 func JSR_ad(m *M6800, mmu mem.MMU16) {
     offset := mmu.R8(m.PC)
     m.PC += 1
     mmu.W16(m.SP-1, m.PC)
     m.SP -= 2
-    if offset & 0x80 == 0x80 {
-        offset = ^offset + 1
-        m.PC = m.X - uint16(offset)
-    } else {
-        m.PC = m.X + uint16(offset)
-    }
+    m.PC = m.X + uint16(offset)
 }
 
 // *
@@ -816,6 +822,7 @@ func LDA_b6(m *M6800, mmu mem.MMU16) {
     m.PC += 2
 }
 
+// *
 func STA_b7(m *M6800, mmu mem.MMU16) {
     mmu.W8(mmu.R16(m.PC), m.A)
     m.CC &= ^V
@@ -838,6 +845,7 @@ func SUB_c0(m *M6800, mmu mem.MMU16) {
     m.PC += 1
 }
 
+// *
 func CMP_c1(m *M6800, mmu mem.MMU16) {
     minuend := m.B
     subtrahend := mmu.R8(m.PC)
@@ -860,11 +868,11 @@ func LDA_c6(m *M6800, mmu mem.MMU16) {
     m.PC += 1
 }
 
+// *
 func ADD_cb(m *M6800, mmu mem.MMU16) {
     augend := m.B
     addend := mmu.R8(m.PC)
-    sum := m.add(augend, addend, false)
-    m.B = sum
+    m.B = m.add(augend, addend, false)
     m.PC += 1
 }
 
@@ -931,6 +939,7 @@ func STA_e7(m *M6800, mmu mem.MMU16) {
     m.PC += 1
 }
 
+// *
 func LDX_ee(m *M6800, mmu mem.MMU16) {
     m.X = mmu.R16(m.X + uint16(mmu.R8(m.PC)))
     m.CC &= ^V
@@ -945,6 +954,7 @@ func STX_ef(m *M6800, mmu mem.MMU16) {
     m.PC += 1
 }
 
+// *
 func LDA_f6(m *M6800, mmu mem.MMU16) {
     m.B = mmu.R8(mmu.R16(m.PC))
     m.CC &= ^V

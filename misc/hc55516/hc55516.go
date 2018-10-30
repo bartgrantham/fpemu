@@ -34,14 +34,14 @@ func (c *CVSD) Addbit(bit bool) {
     c.State += c.Filter
     c.Filter *= FILTER_LEAK
 
-    if c.State < 0 {
-        c.State = 0
+    if c.State < -1 {
+        c.State = -1
     }
     if c.State > 1 {
         c.State = 1
     }
 
-    c.State -= (c.State - .5) * LEAK
+    c.State -= c.State * LEAK
 }
 
 func (c *CVSD) String() string {

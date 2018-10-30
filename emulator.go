@@ -17,8 +17,8 @@ import (
 )
 
 /*
-    wrong rom order!
-    go run emulator.go V_IC7.532 V_IC5.532 V_IC6.532 SOUND3.716; stty $sanity
+    wrong rom order!:  go run emulator.go V_IC7.532 V_IC5.532 V_IC6.532 SOUND3.716; stty $sanity
+    correct:  go run emulator.go V_IC5.532 V_IC7.532 V_IC6.532 SOUND3.716; stty $sanity
 
     Pretty sure I need to do another opcode trace on some of the "too fast" ones (I, J, M), they should
         be awesome phasing sounds instead of little blips
@@ -52,26 +52,19 @@ import (
     keys for: pause, step, 1x .1s .01s .001s
     draw PIA output
     command-line switches for roms, clocks
-
-    Dump both the 8k and the 44.1k raw to files and see if they mostly match
-    Take a hard look at the PIA code, maybe it's not writing the DAC sample properly?
-    Find firepower .wav files online and check to see if the first samples produced match expectations
-    Simpler version: CPU class emits samples after N clocks have passed
-
-    Emulate CVSD
-        Maybe start by writing a stand-alone decoder and run the ROM through it, as is
-        if that works, tweak decay and ramp of the integrator to get it to sound relatively smooth
 */
 
 func main() {
+/*
     if len(os.Args) < 5 {
         fmt.Println("Usage: fpemu V_IC7.532 V_IC5.532 V_IC6.532 SOUND3.716")
         os.Exit(-1)
     }
-    f1, _ := os.Open(os.Args[1])
-    f2, _ := os.Open(os.Args[2])
-    f3, _ := os.Open(os.Args[3])
-    f4, _ := os.Open(os.Args[4])
+*/
+    f1, _ := os.Open("V_IC7.532")
+    f2, _ := os.Open("V_IC5.532")
+    f3, _ := os.Open("V_IC6.532")
+    f4, _ := os.Open("SOUND3.716")
     //f5, _ := os.OpenFile(os.Args[5], os.O_RDWR|os.O_CREATE, 0755)
 
     ic7, _ := ioutil.ReadAll(f1)
@@ -83,7 +76,7 @@ func main() {
     ctrl := make(chan rune, 10)
     cvsd := hc55516.CVSD{}
     pia := m6821.M6821{CVSD:cvsd}
-    mmu := firepower.NewFirepowerMem(ic5, ic7, ic6, ic12, &pia)
+    mmu := firepower.NewFirepowerMem(ic7, ic5, ic6, ic12, &pia)
     m6800 := m6800.NewM6800(mmu, &pia)
 
     // Init PIA->DAC

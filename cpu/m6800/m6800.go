@@ -1,6 +1,7 @@
 package m6800
 
 import (
+//    "encoding/binary"
     "fmt"
     "log"
     "os"
@@ -9,7 +10,7 @@ import (
     "github.com/bartgrantham/fpemu/mem"
     "github.com/bartgrantham/fpemu/pia"
     "github.com/bartgrantham/fpemu/pia/m6821"
-//    "github.com/bartgrantham/fpemu/ui"
+    "github.com/bartgrantham/fpemu/ui"
 
     "github.com/gdamore/tcell"
 )
@@ -17,9 +18,11 @@ import (
 var crystal float32 = 3580000.0 / 4
 
 var wtflog *os.File
+var wavout *os.File
 
 func init() {
-   wtflog, _ = os.OpenFile("WTF.log", os.O_RDWR|os.O_CREATE, 0755) 
+   wtflog, _ = os.OpenFile("WTF.log", os.O_RDWR|os.O_CREATE, 0755)
+   wavout, _ = os.OpenFile("out.f32", os.O_RDWR|os.O_CREATE, 0755)
 }
 
 type M6800 struct {
@@ -115,12 +118,12 @@ log.Printf("crystal %.8f, cps %.8f\n", crystal, cycles_per_sample)
     var i, total_cycles int
     return func(out []float32) {
         total_cycles = 0
-//        start := time.Now()
+        start := time.Now()
         for i=0; i<len(out); i+=2 {
             select {
                 case code = <-ctrl:
                     char := uint8(code)
-                    if char >= '0' && char <= 'o' {
+                    if char >= '0' && char <= 'O' {
                         m.PIA.Write(1, (char-0x10)^0xFF)  // 0x30 == '0' -> 00-1f
                     }
                 default:
@@ -130,13 +133,26 @@ log.Printf("crystal %.8f, cps %.8f\n", crystal, cycles_per_sample)
                 jitter += float32(cycles)
                 total_cycles += cycles
             }
-            samp = float32(pia.ORA) / float32(256)
-            //samp += pia.CVSD.State * 4
+            samp = (float32(pia.ORA) / 256) - .5
+            samp += pia.CVSD.State * 2
             out[i] = samp
             out[i+1] = samp
             jitter -= cycles_per_sample
         }
-//        ui.Log(fmt.Sprintf("%dcyc, %dsamp in %v, jitter %.4f", total_cycles, len(out) / 2, time.Since(start), jitter))
+        wav := make([]int16, len(out))
+        max := float32(-1.0)
+        min := float32(1.0)
+        for i, s := range out {
+            if s < min {
+                min = s
+            }
+            if s > max {
+                max = s
+            }
+            wav[i] = int16(s * 24000)
+        }
+        //binary.Write(wavout, binary.LittleEndian, wav)
+        ui.Log(fmt.Sprintf("%dcyc, %dsamp in %v, jitter %.4f, %.3f..%.3f", total_cycles, len(out) / 2, time.Since(start), jitter, min, max))
     }
 }
 /*
