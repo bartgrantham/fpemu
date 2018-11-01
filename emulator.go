@@ -17,19 +17,13 @@ import (
 )
 
 /*
-    wrong rom order!:  go run emulator.go V_IC7.532 V_IC5.532 V_IC6.532 SOUND3.716; stty $sanity
-    correct:  go run emulator.go V_IC5.532 V_IC7.532 V_IC6.532 SOUND3.716; stty $sanity
+    to guard against panics ruining your tty: export OLDSTTY=`stty -g`; go run emulator.go; stty $OLDSTTY;
 
     Pretty sure I need to do another opcode trace on some of the "too fast" ones (I, J, M), they should
         be awesome phasing sounds instead of little blips
 
     Sounds not accurate:
     * 3 : probably perfect, might want to check again
-    * 7 : missing "YOU ARE DESTROYED", the sound also plays WAY TOO FAST
-    * 8 : missing "YOU WON ONE MISSION", instead I hear a sound?
-    * c : missing "MISSION ACCOMPLISHED"
-    * d : missing "FIRE"
-    * e : missing "ENEMY DESTROYED"
     * f : missing "FIRE POWER MISSING ACCOMPLISHED", the sweep should be noise instead of tone
     * 12 : screeching instead of cool "engine" sound
     * 13 : silence (correct?)
