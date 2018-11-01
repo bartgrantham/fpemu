@@ -8,17 +8,8 @@ import (
 )
 
 /*
-From the 1975 manual:
-
-2-1.2
-* H is set when there's a carry from b3 to b4
-* I is set by hardware interrupts or SEI opcode
-* N is set if b7 is set
-* Z is set if the result is all zeros
-* C is set if there is a carry from b7
-* V is set if there was an arithmetic overflow
-    * overflow of A+B=R is defined as: V = (A:7 == B:7) & (R:7 != A:7)  (A and B same sign, R opposite)
-    * overflow of A-B=R is defined as: V = (A:7 == !B:7) & (R:7 != A:7) (A and -B same sign, R opposite)
+* overflow of A+B=R is defined as: V = (A:7 == B:7) & (R:7 != A:7)  (A and B same sign, R opposite)
+* overflow of A-B=R is defined as: V = (A:7 == !B:7) & (R:7 != A:7) (A and -B same sign, R opposite)
 
 * REI restores the previous interrupt flag from the stack by restoring CC
 * note that calling CLI at the beginning of an interrupt allows a higher priority interrupt to occur, because the registers will be saved if another interrupt happens.  The manual explicitly mentions this nesting.
@@ -80,10 +71,11 @@ func UNIMPL(m *M6800, mmu mem.MMU16) {
 }
 
 func INVALD(m *M6800, mmu mem.MMU16) {
-    status := fmt.Sprintf("\nUnimplmented opcode: %.2X\n    CPU status: %s", op, m.Status())
+    status := fmt.Sprintf("\nInvalid opcode: %.2X\n    CPU status: %s", op, m.Status())
     panic(status)
 }
 
+// *
 func NOP_01(m *M6800, mmu mem.MMU16) {
 }
 
@@ -317,6 +309,7 @@ func COM_43(m *M6800, mmu mem.MMU16) {
     m.set_NZ8(m.A)
 }
 
+// *
 func LSR_44(m *M6800, mmu mem.MMU16) {
     if m.A & 0x01 == 0x01 {
         m.CC |= C
@@ -499,6 +492,7 @@ func COM_73(m *M6800, mmu mem.MMU16) {
     m.PC += 2
 }
 
+// *
 func ROR_76(m *M6800, mmu mem.MMU16) {
     addr := mmu.R16(m.PC)
     tmp := mmu.R8(addr)
