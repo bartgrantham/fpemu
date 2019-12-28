@@ -2,7 +2,7 @@ package firepower
 
 import (
     "fmt"
-//"log"
+    "log"
     "github.com/bartgrantham/fpemu/pia"
 )
 
@@ -13,6 +13,7 @@ type FirepowerMem struct {
     IC5     [4096]uint8  // $C000-$CFFF
     IC6     [4096]uint8  // $D000-$DFFF
     IC12    [2048]uint8  // $F800-$FFFF
+//    IC12    [4096]uint8  // $F800-$FFFF
     PIA     pia.PIA
     // for tracking memory hotspots
     reads   [65536]int
@@ -53,8 +54,11 @@ func (m *FirepowerMem) Peek8(addr uint16) (uint8, int, int) {
             val = m.IC6[addr-0xD000]
         case addr >= 0xF800 && addr <= 0xFFFF:
             val = m.IC12[addr-0xF800]
+//        case addr >= 0xF000 && addr <= 0xFFFF:
+//            val = m.IC12[addr-0xF000]
         default:
-            panic(fmt.Sprintf("Peek8 invalid address: $%.4X", addr))
+            log.Printf("Peek8 invalid address: $%.4X\n", addr)
+            //panic(fmt.Sprintf("Peek8 invalid address: $%.4X", addr))
     }
     return val, m.reads[addr], m.writes[addr]
 }
@@ -76,8 +80,12 @@ func (m *FirepowerMem) R8(addr uint16) uint8 {
             return m.IC6[addr-0xD000]
         case addr >= 0xF800 && addr <= 0xFFFF:
             return m.IC12[addr-0xF800]
+//        case addr >= 0xF000 && addr <= 0xFFFF:
+//            return m.IC12[addr-0xF000]
         default:
-            panic(fmt.Sprintf("R8 invalid address: $%.4X", addr))
+            log.Printf("R8 invalid address: $%.4X\n", addr)
+            return 0
+            //panic(fmt.Sprintf("R8 invalid address: $%.4X", addr))
     }
 }
 
@@ -99,7 +107,8 @@ func (m *FirepowerMem) W8(addr uint16, val uint8) {
 //        case addr >= 0xF800 && addr <= 0xFFFF:
 //            m.IC12[addr-0xF800] = val
         default:
-            panic(fmt.Sprintf("W8 invalid address: $%.4X", addr))
+            log.Printf("W8 invalid address: $%.4X\n", addr)
+            //panic(fmt.Sprintf("W8 invalid address: $%.4X", addr))
     }
     return
 }
@@ -130,6 +139,9 @@ func (m *FirepowerMem) R16(addr uint16) uint16 {
         case addr >= 0xF800 && addr <= 0xFFFE:
             high = m.IC12[addr-0xF800]
             low  = m.IC12[addr-0xF800+1]
+//        case addr >= 0xF000 && addr <= 0xFFFE:
+//            high = m.IC12[addr-0xF000]
+//            low  = m.IC12[addr-0xF000+1]
         default:
             panic(fmt.Sprintf("R16 invalid address: $%.4X", addr))
     }

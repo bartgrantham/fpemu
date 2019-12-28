@@ -15,14 +15,18 @@ import (
     "github.com/gdamore/tcell"
 )
 
+/*
+breakpoint on lasercue: $FB59
+*/
+
 var crystal float32 = 3580000.0 / 4
 
 var wtflog *os.File
 var wavout *os.File
 
 func init() {
-   wtflog, _ = os.OpenFile("WTF.log", os.O_RDWR|os.O_CREATE, 0755)
-   wavout, _ = os.OpenFile("out.f32", os.O_RDWR|os.O_CREATE, 0755)
+//   wtflog, _ = os.OpenFile("WTF.log", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
+//   wavout, _ = os.OpenFile("out.f32", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
 }
 
 type M6800 struct {
@@ -49,7 +53,7 @@ const (
 
 func NewM6800(mmu mem.MMU16, pia pia.PIA) *M6800{
     m := M6800{PC:mmu.R16(0xFFFE), PIA:pia}
-//    m.SEI_0f(mmu)  // CPU starts with interrupts disabled/masked
+//    m.SEI_0F(mmu)  // CPU starts with interrupts disabled/masked
     return &m
 }
 
@@ -58,12 +62,12 @@ func (m *M6800) Status() string {
     return fmt.Sprintf(fmtstr, m.PC, m.PC, m.X, m.A, m.B, m.CC, m.SP)
 }
 
+var logging bool// = true
 func (m *M6800) Step(mmu mem.MMU16) (int, error) {
     //ui.Log(m.Status())
     if (m.PIA.IRQ(0) || m.PIA.IRQ(1)) && (m.CC & I != I) {
         m.save_registers(mmu)
-        //m.SEI_0f(mmu)  // interrupts masked
-        SEI_0f(m, mmu)  // interrupts masked
+        SEI_0F(m, mmu)  // interrupts masked
         if m.NMI {
             m.PC = mmu.R16(0xFFFC)
         } else {
@@ -72,19 +76,21 @@ func (m *M6800) Step(mmu mem.MMU16) (int, error) {
     }
     opcode := mmu.R8(m.PC)
     m.PC += 1
-    count, err := m.dispatch(opcode, mmu)
-/*
-    fmt.Fprintln(wtflog, "", m.Status())
-    first32 := "    "
-    for addr:=uint16(0); addr<0x20; addr++ {
-        val, _, _ := mmu.Peek8(addr)
-        first32 += fmt.Sprintf("%.2x ", val)
-        if addr % 4 == 3 {
-            first32 += " "
+
+    var out string
+    if logging {
+        out = fmt.Sprintf("%.2X  %s\n", opcode, m.Status())
+        for index:=0; index<0x80; index+=0x20 {
+            out += "    "
+            for offset:=0; offset<0x20; offset++ {
+                val, _, _ := mmu.Peek8(uint16(index+offset))
+                out += fmt.Sprintf("%.2x ", val)
+            }
+            out += "\n"
         }
+        fmt.Fprintln(wtflog, out)
     }
-    fmt.Fprintln(wtflog, first32)
-*/
+    count, err := m.dispatch(opcode, mmu)
     return count, err
 }
 
@@ -108,12 +114,12 @@ func (m *M6800) Step(mmu mem.MMU16) (int, error) {
 On firepower port A is the DAC, port B is from the mainboard
 */
 
-func (m *M6800) Callback(mmu mem.MMU16, ctrl chan rune, pia *m6821.M6821) func([]float32) {
-    var code rune
+func (m *M6800) Callback(mmu mem.MMU16, ctrl chan uint8, pia *m6821.M6821) func([]float32) {
+    var code uint8
 // this calculation is probably all wrong...
     hostrate := float32(44100)
     cycles_per_sample := crystal / hostrate
-log.Printf("crystal %.8f, cps %.8f\n", crystal, cycles_per_sample)
+    log.Printf("crystal %.8f, cps %.8f\n", crystal, cycles_per_sample)
     var jitter, samp float32
     var i, total_cycles int
     return func(out []float32) {
@@ -122,10 +128,7 @@ log.Printf("crystal %.8f, cps %.8f\n", crystal, cycles_per_sample)
         for i=0; i<len(out); i+=2 {
             select {
                 case code = <-ctrl:
-                    char := uint8(code)
-                    if char >= '0' && char <= 'O' {
-                        m.PIA.Write(1, (char-0x10)^0xFF)  // 0x30 == '0' -> 00-1f
-                    }
+                    m.PIA.Write(1, code^0xFF)
                 default:
             }
             for jitter < 0 {
@@ -155,41 +158,6 @@ log.Printf("crystal %.8f, cps %.8f\n", crystal, cycles_per_sample)
         ui.Log(fmt.Sprintf("%dcyc, %dsamp in %v, jitter %.4f, %.3f..%.3f", total_cycles, len(out) / 2, time.Since(start), jitter, min, max))
     }
 }
-/*
-func (m *M6800) Callback(mmu mem.MMU16, ctrl chan rune, pia *m6821.M6821) func([]float32) {
-    var chr rune
-// this calculation is probably all wrong...
-    audiorate := float32(44100)
-    cycles_per_sample := crystal / audiorate
-log.Printf("crystal %.8f, cps %.8f\n", crystal, cycles_per_sample)
-    var total_cycles, elapsed, samp float32
-    var i int
-    return func(out []float32) {
-        total_cycles = 0
-        start := time.Now()
-        for i=0; i<len(out); i+=2 {
-            select {
-                case chr = <-ctrl:
-                    if chr >= '0' && chr <= 'o' {
-                        m.PIA.Write(1, uint8(chr-'0'))
-                    }
-                default:
-            }
-            cycles, _ := m.Step(mmu)
-            elapsed += float32(cycles)
-            total_cycles += elapsed
-            if elapsed > cycles_per_sample {
-                samp = float32(pia.ORA) / float32(256)
-                out[i] = samp
-                out[i+1] = samp
-                elapsed -= cycles_per_sample
-                continue
-            }
-        }
-        ui.Log(fmt.Sprintf("%.0f cycles for %d samples in %v", total_cycles, len(out) / 2, time.Since(start)))
-    }
-}
-*/
 
 func (m *M6800) Run(mmu mem.MMU16, ctrl chan rune, screen tcell.Screen) {
     var chr rune
@@ -200,24 +168,6 @@ func (m *M6800) Run(mmu mem.MMU16, ctrl chan rune, screen tcell.Screen) {
     _ = tick
     var total, remainder float32
     go func() {
-/*
-        defer func() {
-            //if r := recover(); r != nil {
-            //}
-            screen.Fini()
-            ui.DumpLog()
-            for addr:=0; addr<0x80; addr++ {
-                if addr & 0x0F == 0x00 {
-                    fmt.Printf("$%.2x:  ", addr)
-                }
-                val, _, _ := mmu.Peek8(uint16(addr))
-                fmt.Printf("%.2x  ", val)
-                if addr & 0x0F == 0x0F {
-                    fmt.Println()
-                }
-            }
-        }()
-*/
         for {
             select {
                 case chr = <-ctrl:
