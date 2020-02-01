@@ -137,6 +137,18 @@ TODO:
 func main() {
     if len(os.Args) < 2 {
         fmt.Println("Usage: fpemu addr=roms/foo addr=roms/bar ...")
+        fmt.Println("   or: fpemu <romset>\n")
+        carriage := 0
+        fmt.Printf("romsets: ")
+        for name, _ := range presets {
+            if carriage + len(name) > 70 {
+                fmt.Printf("\n         ")
+                carriage = 0
+            }
+            fmt.Printf(" %s", name)
+            carriage += len(name)
+        }
+        fmt.Println("\n")
         os.Exit(-1)
     }
 
