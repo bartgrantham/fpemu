@@ -116,7 +116,7 @@ On firepower port A is the DAC, port B is from the mainboard
 
 func (m *M6800) Callback(mmu mem.MMU16, ctrl chan uint8, pia *m6821.M6821) func([]float32) {
     var code uint8
-// this calculation is probably all wrong...
+    // this calculation is suspect
     hostrate := float32(44100)
     cycles_per_sample := crystal / hostrate
     log.Printf("crystal %.8f, cps %.8f\n", crystal, cycles_per_sample)
@@ -125,7 +125,7 @@ func (m *M6800) Callback(mmu mem.MMU16, ctrl chan uint8, pia *m6821.M6821) func(
     return func(out []float32) {
         total_cycles = 0
         start := time.Now()
-        for i=0; i<len(out); i+=2 {
+        for i=0; i<len(out); i++ {
             select {
                 case code = <-ctrl:
                     m.PIA.Write(1, code^0xFF)
@@ -139,25 +139,26 @@ func (m *M6800) Callback(mmu mem.MMU16, ctrl chan uint8, pia *m6821.M6821) func(
             samp = (float32(pia.ORA) / 256) - .5
             samp += pia.CVSD.State * 2
             out[i] = samp
-            out[i+1] = samp
             jitter -= cycles_per_sample
         }
-        wav := make([]int16, len(out))
         max := float32(-1.0)
         min := float32(1.0)
-        for i, s := range out {
+        //wav := make([]int16, len(out))
+        for _, s := range out {
             if s < min {
                 min = s
             }
             if s > max {
                 max = s
             }
-            wav[i] = int16(s * 24000)
+            //wav[i] = int16(s * 24000)
         }
         //binary.Write(wavout, binary.LittleEndian, wav)
+
         ui.Log(fmt.Sprintf("%dcyc, %dsamp in %v, jitter %.4f, %.3f..%.3f", total_cycles, len(out) / 2, time.Since(start), jitter, min, max))
     }
 }
+
 
 func (m *M6800) Run(mmu mem.MMU16, ctrl chan rune, screen tcell.Screen) {
     var chr rune

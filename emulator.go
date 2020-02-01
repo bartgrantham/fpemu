@@ -47,18 +47,19 @@ var presets map[string]string = map[string]string{
     "gorgar"    : "B000=roms/gorgar/v_ic7.532 C000=roms/gorgar/v_ic5.532 D000=roms/gorgar/v_ic6.532 F800=roms/gorgar/sound2.716",
     "inferno"   : "E000=roms/inferno/ic8.inf",
     "joust"     : "F000=roms/joust/joust.snd",
-//    "joust2"    : "",
     "junglelord" : "B000=roms/junglelord/speech7.532 C000=roms/junglelord/speech5.532 D000=roms/junglelord/speech7.532 F800=roms/junglelord/sound3.716",
     "lasercue"  : "F800=roms/lasercue/sound12.716",
     "lottofun"  : "F000=roms/lottofun/vl2532.snd",
     "mayday"    : "F800=roms/mayday/ic28-8.bin",
     "mysticmarathon" : "E000=roms/mysticm/mm01_1.a08",
+    "pharaoh"   : "B000=roms/pharaoh/speech7.532 C000=roms/pharaoh/speech5.532 D000=roms/pharaoh/speech6.532 E000=roms/pharaoh/speech4.532 F800=roms/pharaoh/sound12.716",
     "playball"  : "B000=roms/playball/speech.ic4 C000=roms/playball/speech.ic5 D000=roms/playball/speech.ic6 E000=roms/playball/speech.ic7 F000=roms/playball/playball.snd",
     "robotron2084" : "F000=roms/robotron2084/robotron.snd",
     "sinistar"  : "B000=roms/sinistar/speech.ic7 C000=roms/sinistar/speech.ic5 D000=roms/sinistar/speech.ic6 E000=roms/sinistar/speech.ic4 F000=roms/sinistar/sinistar.snd",
     "splat"     : "F000=roms/splat/splat.snd",
     "stargate"  : "F800=roms/stargate/sg.snd",
     "starlight" : "F800=roms/starlight/sound3.716",
+    "thunderball" : "B000=roms/thunderball/speech7.532 C000=roms/thunderball/speech5.532 D000=roms/thunderball/speech6.532 E000=roms/thunderball/speech4.532 F000=roms/thunderball/sound12.532",
     "timefantasy" : "F800=roms/timefantasy/sound3.716",
     "turkeyshoot" : "E000=roms/tshoot/rom1.cpu",
 }
@@ -71,6 +72,7 @@ Defender (pretty much all): 06, 07, 0A, 0B, 0D,
 Firepower (pretty much all): 09, 0A, 2F, 31, 38, 
 Joust (pretty much all): 07, 10, 13, 14/15,
 Lasercue: 02, 04
+Pharaoh: 12
 Robotron 2084: 0A (like Defender), 27,
 Sinistar: 06, 0B, 0D, 0E, 0F, 13, 19, 1B, 1D,
 Splat: 0D, 12, 13/14, 16
@@ -141,8 +143,8 @@ func main() {
     // Init emulation
     ctrl := make(chan uint8, 10)
     cvsd := hc55516.CVSD{}
-    pia := m6821.M6821{CVSD:cvsd}
-    mmu := d8224.NewD8224Mem(&pia)
+    pia := &m6821.M6821{CVSD:cvsd}
+    mmu := d8224.NewD8224Mem(pia)
     var mountspecs []string
     if len(os.Args) == 2 && ! strings.ContainsAny(os.Args[1], "=") {
         preset, ok := presets[os.Args[1]]
@@ -188,10 +190,10 @@ func main() {
             os.Exit(-1)
         }
     }
-    m6800 := m6800.NewM6800(mmu, &pia)
+    m6800 := m6800.NewM6800(mmu, pia)
 
     // Init Host Audio
-    err := ui.StartAudio(m6800.Callback(mmu, ctrl, &pia))
+    err := ui.StartAudio(m6800.Callback(mmu, ctrl, pia))
     if err != nil {
         fmt.Println("Couldn't start audio:", err)
         os.Exit(-1)
