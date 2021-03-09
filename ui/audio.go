@@ -92,7 +92,9 @@ func StartAudio(gen func([]float32)) error {
         Freq:     44100,
         Format:   sdl.AUDIO_S16, // signed 16-bit floats
         Channels: 2,             // stereo
-        Samples:  256,           // 5.8ms at 44.1KHz
+//        Samples:  256,           // 5.8ms at 44.1KHz
+        Samples:  512,           // 11.6ms at 44.1KHz
+//        Samples:  2048,           // 46.4ms at 44.1KHz
         Callback: sdl.AudioCallback(C.Callback),
     }
     obtained := sdl.AudioSpec{}

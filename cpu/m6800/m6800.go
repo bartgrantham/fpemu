@@ -1,7 +1,6 @@
 package m6800
 
 import (
-//    "encoding/binary"
     "fmt"
     "log"
     "os"
@@ -15,17 +14,15 @@ import (
     "github.com/gdamore/tcell"
 )
 
-/*
-breakpoint on lasercue: $FB59
-*/
-
 var crystal float32 = 3580000.0 / 4
 
-var wtflog *os.File
+var trace  *os.File
 var wavout *os.File
 
+var Scr tcell.Screen
+
 func init() {
-//   wtflog, _ = os.OpenFile("WTF.log", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
+//   trace, _ = os.OpenFile("trace.log", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
 //   wavout, _ = os.OpenFile("out.f32", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
 }
 
@@ -38,10 +35,13 @@ type M6800 struct {
     SP      uint16
     PIA     pia.PIA
     NMI     bool
-//    cps     float64
-//    cycles  float64
 }
 
+var lookback [16]M6800
+var lbindex int
+
+// flags: --HI NZVC
+//        8421 8421
 const (
     C   uint8  = 1 << iota  // carry
     V   // overflow
@@ -52,6 +52,7 @@ const (
 )
 
 func NewM6800(mmu mem.MMU16, pia pia.PIA) *M6800{
+    // On firepower port A is the DAC, port B is from the mainboard
     m := M6800{PC:mmu.R16(0xFFFE), PIA:pia}
 //    m.SEI_0F(mmu)  // CPU starts with interrupts disabled/masked
     return &m
@@ -62,9 +63,33 @@ func (m *M6800) Status() string {
     return fmt.Sprintf(fmtstr, m.PC, m.PC, m.X, m.A, m.B, m.CC, m.SP)
 }
 
-var logging bool// = true
+var logging bool //= true
 func (m *M6800) Step(mmu mem.MMU16) (int, error) {
-    //ui.Log(m.Status())
+    var out string
+    // CPU state trace
+    defer func() {
+        if r := recover(); r != nil {
+            Scr.Fini()
+            for i:=0; i<len(lookback); i++ {
+                j := (lbindex+i) % len(lookback)
+                cpu := lookback[j]
+                out, _ = (&cpu).Disasm(cpu.PC, mmu)
+                fmt.Printf("%s %s\n", cpu.Status(), out)
+            }
+            for index:=0; index<0x80; index+=0x20 {
+                out = "    "
+                for offset:=0; offset<0x20; offset++ {
+                    val := mmu.R8(uint16(index+offset))
+                    out += fmt.Sprintf("%.2x ", val)
+                    if offset == 0x0f {
+                        out += "  "
+                    }
+                }
+                fmt.Println(out)
+            }
+            panic(r)
+        }
+    }()
     if (m.PIA.IRQ(0) || m.PIA.IRQ(1)) && (m.CC & I != I) {
         m.save_registers(mmu)
         SEI_0F(m, mmu)  // interrupts masked
@@ -74,22 +99,29 @@ func (m *M6800) Step(mmu mem.MMU16) (int, error) {
             m.PC = mmu.R16(0xFFF8)
         }
     }
-    opcode := mmu.R8(m.PC)
-    m.PC += 1
+    lookback[lbindex] = *m
+    lbindex = (lbindex+1) % len(lookback)
 
-    var out string
+    opcode := mmu.R8(m.PC)
+
     if logging {
-        out = fmt.Sprintf("%.2X  %s\n", opcode, m.Status())
+        //out = fmt.Sprintf("%.2X  %s\n", opcode, m.Status())
+        out, _ = m.Disasm(m.PC, mmu)
+        out += "\n" + mmu.String()
+/*
         for index:=0; index<0x80; index+=0x20 {
             out += "    "
             for offset:=0; offset<0x20; offset++ {
-                val, _, _ := mmu.Peek8(uint16(index+offset))
+                val := mmu.R8(uint16(index+offset))
                 out += fmt.Sprintf("%.2x ", val)
             }
             out += "\n"
         }
-        fmt.Fprintln(wtflog, out)
+*/
+        fmt.Fprintln(trace, out)
     }
+
+    m.PC += 1
     count, err := m.dispatch(opcode, mmu)
     return count, err
 }

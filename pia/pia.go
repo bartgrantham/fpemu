@@ -7,4 +7,5 @@ type PIA interface {
     Write(port uint16, val uint8)
     IRQ(line uint16) bool
     Reset()
+    String() string  //temporary
 }

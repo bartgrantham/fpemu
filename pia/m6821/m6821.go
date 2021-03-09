@@ -32,7 +32,6 @@ const (
     IRQx1                      // IRQx1 goes high on active transition of Cx1, cleared by MPU read of A/B
 )
 
-
 type M6821 struct {
     ORA, ORB    uint8  // output registers
     CRA, CRB    uint8  // control registers
@@ -43,6 +42,12 @@ type M6821 struct {
     CA1, CA2, CB1, CB2 bool
     CVSD        hc55516.CVSD
 //    hist []uint8
+}
+
+func (m *M6821) String() string {
+    fmtstr := "ORA/ORB: %.2X/%.2X ; DDRA/DDRB: %.2X/%.2X ; CRA/CRB: 0x%08b/0x%08b ; IRQA/IRQB: %t/%t ; CA1/CA2/CB1/CB2: %t/%t/%t/%t"
+    return fmt.Sprintf(fmtstr, m.ORA, m.ORB, m.DDRA, m.DDRB, m.CRA, m.CRB,
+           m.IRQA, m.IRQB, m.CA1, m.CA2, m.CB1, m.CB2)
 }
 
 func (m *M6821) R8(addr uint16) uint8 {
